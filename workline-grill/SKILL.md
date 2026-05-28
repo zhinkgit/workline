@@ -1,6 +1,6 @@
 ---
 name: workline-grill
-description: "Workline 需求澄清与 PRD 生成。Use when the user provides a Workline active directory, answers an in-progress Workline Grill clarification question, wants grill-style one-question-at-a-time clarification, wants to turn brief.md and references into prd.md, or wants a concise PRD before task splitting. Do not use for tasks.csv generation or implementation."
+description: "Workline 需求澄清与 PRD 生成。Use when the user provides a Workline active directory, answers an in-progress Workline Grill clarification question, wants grill-style one-question-at-a-time clarification, wants to turn brief.md and references into prd.md, or wants to revise prd.md after Workline review before task splitting. Do not use for tasks.csv generation, review reports, or implementation."
 ---
 
 # Workline Grill
@@ -28,13 +28,14 @@ description: "Workline 需求澄清与 PRD 生成。Use when the user provides a
 ## 工作流
 
 1. 只读取 `brief.md`，不修改 `brief.md`；扫描 `references/` 的一级内容。
-2. 优先自行查证能从仓库、`brief.md` 或 `references/` 判断的问题，再把需要用户确认的判断拿出来问。
-3. 使用 `templates/prd.md` 在活动目录下创建或更新草稿态 `prd.md`；第一版 `prd.md` 只是工作底稿，不代表澄清完成。
-4. 在内部形成待澄清问题队列，至少覆盖：目标和非目标、范围边界、术语定义、输入输出、用户流程、验收标准、风险与依赖。
-5. 像 `grill-me` 一样沿决策树逐个分支推进：每次只问一个关键问题，等待用户回答后继续下一个问题。
-6. 每个问题都给出推荐答案或推荐取舍；问题编号为“问题 1 / 问题 2 / ...”，并说明“你回答后我继续追问下一个边界点”。
-7. 每次收到回答后，先更新 `prd.md` 的相关章节和“关键决策与澄清记录”，再继续提出下一个尚未闭环的问题。
-8. 不要轻易判断“只剩一个问题”“唯一问题”“当前只有一个阻塞问题”；只有满足“PRD 完成条件”后才能最终收尾。
+2. 如果用户要求按审查意见修订 PRD，读取相关 `reviews/prd-review-*.md` 或外部审查文件。
+3. 优先自行查证能从仓库、`brief.md`、`references/` 或审查意见判断的问题，再把需要用户确认的判断拿出来问。
+4. 使用 `templates/prd.md` 在活动目录下创建或更新草稿态 `prd.md`；第一版 `prd.md` 只是工作底稿，不代表澄清完成。
+5. 在内部形成待澄清问题队列，至少覆盖：目标和非目标、范围边界、术语定义、输入输出、用户流程、验收标准、风险与依赖。
+6. 像 `grill-me` 一样沿决策树逐个分支推进：每次只问一个关键问题，等待用户回答后继续下一个问题。
+7. 每个问题都给出推荐答案或推荐取舍；问题编号为“问题 1 / 问题 2 / ...”，并说明“你回答后我继续追问下一个边界点”。
+8. 每次收到回答后，先更新 `prd.md` 的相关章节和“关键决策与澄清记录”，再继续提出下一个尚未闭环的问题。
+9. 不要轻易判断“只剩一个问题”“唯一问题”“当前只有一个阻塞问题”；只有满足“PRD 完成条件”后才能最终收尾。
 
 ## 用户选择工具
 
@@ -42,7 +43,7 @@ description: "Workline 需求澄清与 PRD 生成。Use when the user provides a
 
 ## PRD 完成条件
 
-进入 `$workline-tasks` 前，`prd.md` 必须满足：
+进入 `$workline-review` 或 `$workline-tasks` 前，`prd.md` 必须满足：
 
 - 目标明确。
 - 非目标明确。
@@ -63,4 +64,4 @@ description: "Workline 需求澄清与 PRD 生成。Use when the user provides a
 - `prd.md` 路径。
 - 已闭环的关键决策。
 - 仍存在但不阻塞任务拆分的风险或待确认问题。
-- 下一步使用 `$workline-tasks`。
+- 下一步先使用 `$workline-review` 审查 `prd.md`；审查通过后再使用 `$workline-tasks`。

@@ -43,4 +43,5 @@ python workline-init/scripts/init_workline.py --root . --slug bulk-import --brie
 
 - 新建活动目录路径。
 - `brief.md` 已写入原始粗需求和补充材料提示。
+- `references/` 已创建。
 - 下一步应使用 `$workline-grill`，并显式传入活动目录。

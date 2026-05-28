@@ -1,0 +1,4 @@
+interface:
+  display_name: "Workline Review"
+  short_description: "审查Workline PRD和任务CSV并形成阶段门禁结论"
+  default_prompt: "Use $workline-review to review this Workline prd.md or tasks.csv before the next stage."

@@ -17,6 +17,9 @@ workline/
 │   ├── SKILL.md
 │   ├── agents/openai.yaml
 │   └── templates/prd.md
+├── workline-review/
+│   ├── SKILL.md
+│   └── agents/openai.yaml
 ├── workline-tasks/
 │   ├── SKILL.md
 │   ├── agents/openai.yaml
@@ -31,12 +34,13 @@ workline/
     └── agents/openai.yaml
 ```
 
-## 五个 Skill
+## 六个 Skill
 
 | Skill | 职责 | 不做什么 |
 | --- | --- | --- |
-| `workline-init` | 创建 `.workline/active/<timestamp-slug>/`、`brief.md` 和 `references/` | 不追问、不写 PRD、不拆任务、不执行代码 |
+| `workline-init` | 创建 `.workline/active/<timestamp-slug>/`、`brief.md` 和 `references/` | 不追问、不写 PRD、不拆任务、不审查、不执行代码 |
 | `workline-grill` | 读取 `brief.md` 和 `references/`，逐问逐答澄清需求并生成 `prd.md` | 不生成 `tasks.csv`，不执行代码 |
+| `workline-review` | 审查 `prd.md` 或 `tasks.csv`，把阶段结论写入 `reviews/` | 不实现代码，不把审查报告当作新需求源，不替代修订阶段 |
 | `workline-tasks` | 只根据 `prd.md` 拆分任务，生成并校验 `tasks.csv` | 不实现代码，不把未确认问题伪装成任务 |
 | `workline-run` | 作为 `/goal` 执行规则包，约束任务选择、状态更新、日志和 REVIEW | 不重新实现调度器，不替代 `/goal` |
 | `workline-archive` | 检查过程文件闭环后，将活动目录移动到 archive | 不补做任务，不伪造日志，不覆盖归档目录 |
@@ -51,12 +55,17 @@ workline/
 │       ├── prd.md
 │       ├── tasks.csv
 │       ├── run.md
-│       └── references/
+│       ├── references/
+│       └── reviews/              # 由 workline-review 按需创建
+│           ├── prd-review-2026-05-28-0915.md
+│           └── tasks-review-2026-05-28-1015.md
 └── archive/
     └── 2026-05-28-0915-example/
 ```
 
 活动目录命名为 `YYYY-MM-DD-HHMM-brief-slug`。`references/` 默认保持浅层结构，用来放参考仓库软链接、旧实现、网页资料、协议文档、用户文件，以及执行过程中产生的中间产物。多个关联产物可放入 `references/T003-build/` 这类任务编号目录。
+
+`reviews/` 由 `workline-review` 按需创建，用来放 Workline 自审、人工审查或其它 AI 审查结果。审查报告不是新的需求源；它只指出 `prd.md` 或 `tasks.csv` 是否需要回到上一个阶段修订。
 
 ## CSV 状态源
 
@@ -103,8 +112,64 @@ review_state = passed
 
 1. 使用 `$workline-init` 创建活动目录，并把参考资料放进 `references/`。
 2. 使用 `$workline-grill` 读取活动目录，逐问逐答生成 `prd.md`。
-3. 使用 `$workline-tasks` 只根据 `prd.md` 生成 `tasks.csv`，并运行 CSV 校验。
-4. 使用 `/goal 根据 $workline-run 规范 执行 .workline/active/<slug>/tasks.csv` 进入实现阶段。
-5. 使用 `$workline-archive` 检查闭环后归档活动目录。
+3. 使用 `$workline-review` 审查 `prd.md`：
+   - `PASS`：进入 `$workline-tasks`。
+   - `REVISE`：回到 `$workline-grill` 修订 `prd.md`。
+   - `BLOCKED`：补材料或确认关键决策后再继续。
+4. 使用 `$workline-tasks` 只根据 `prd.md` 生成 `tasks.csv`，并运行 CSV 校验。
+5. 使用 `$workline-review` 审查 `tasks.csv`：
+   - `PASS`：进入 `/goal`。
+   - `REVISE`：回到 `$workline-tasks` 修订 `tasks.csv`。
+   - `BLOCKED`：先修正 PRD 或任务定义中的阻塞问题。
+6. 使用 `/goal 根据 $workline-run 规范 执行 .workline/active/<slug>/tasks.csv` 进入实现阶段。
+7. 使用 `$workline-archive` 检查闭环后归档活动目录。
+
+## 审查与多 AI 复核
+
+`workline-review` 可以在本对话中直接审查，也可以承接其它 AI 或人工审查意见。推荐做法是把外部审查结果保存到 `reviews/`，然后再让 `$workline-review` 汇总判断。
+
+给其它 AI 审查 PRD 时，可以使用：
+
+```text
+请审查这个 Workline PRD。只做审查，不要改文件。
+
+活动目录：
+.workline/active/<slug>/
+
+重点阅读：
+- brief.md
+- prd.md
+- references/ 下相关资料
+
+请输出：
+1. 阻塞问题
+2. 需求歧义
+3. 非目标是否清楚
+4. 验收标准是否可验证
+5. 是否可以进入 tasks.csv 拆分
+6. 建议修改项
+```
+
+给其它 AI 审查任务拆分时，可以使用：
+
+```text
+请审查这个 Workline tasks.csv。只做审查，不要改文件。
+
+活动目录：
+.workline/active/<slug>/
+
+重点阅读：
+- prd.md
+- tasks.csv
+- reviews/ 下已有 PRD 审查结论
+
+请输出：
+1. CSV 结构和依赖问题
+2. 是否遗漏 PRD 要求
+3. 每个任务是否足够小且可验证
+4. AFK/HITL 分类是否合理
+5. REVIEW 行是否完整
+6. 是否可以进入 /goal 执行
+```
 
 Workline 不混用其它规划工作流。若项目已有测试、构建或提交规范，执行阶段继续遵守项目自身规范。

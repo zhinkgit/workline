@@ -1,6 +1,6 @@
 ---
 name: workline-tasks
-description: "根据 Workline PRD 生成可执行 tasks.csv。Use when the user provides a Workline active directory or prd.md and wants to split confirmed requirements into small verifiable tasks, create tasks.csv with dependencies and REVIEW, or validate the generated CSV before /goal execution. Do not use for code implementation."
+description: "根据 Workline PRD 生成或修订可执行 tasks.csv。Use when the user provides a Workline active directory or prd.md and wants to split confirmed requirements into small verifiable tasks, create tasks.csv with dependencies and REVIEW, revise tasks.csv after Workline review, or validate the generated CSV before /goal execution. Do not use for code implementation or PRD review."
 ---
 
 # Workline Tasks
@@ -17,12 +17,14 @@ description: "根据 Workline PRD 生成可执行 tasks.csv。Use when the user 
 - PRD 章节完整。
 - 关键问题已确认。
 - 非阻塞待确认问题已说明为什么不阻塞任务拆分。
+- 如果 `reviews/prd-review-*.md` 存在且最新结论是 `REVISE` 或 `BLOCKED`，先要求回到 `$workline-grill` 修订 PRD。
+- 如果用户要求按任务审查意见修订，读取相关 `reviews/tasks-review-*.md` 或外部审查文件。
 
 如果 PRD 不满足以上条件，停止并指出缺口；不要把未确认问题伪装成任务。
 
 ## 任务拆分规则
 
-- `prd.md` 是唯一需求源。
+- `prd.md` 是唯一需求源；审查报告只能作为质量反馈，不能引入 PRD 之外的新需求。
 - 每条任务都应能单独实现、单独验证、单独记录状态。
 - 每条非 `REVIEW` 任务必须填写：
   - `id`
@@ -74,6 +76,7 @@ python workline-tasks/scripts/workline_csv.py validate .workline/active/<slug>/t
 - 不实现代码。
 - 不降低 PRD 验收标准。
 - 不把待确认问题拆成看似可执行的任务。
+- 不把审查报告中的新增想法直接写入任务；需要先回到 PRD 澄清。
 
 ## 输出
 
@@ -82,4 +85,4 @@ python workline-tasks/scripts/workline_csv.py validate .workline/active/<slug>/t
 - `tasks.csv` 路径。
 - 任务数量和 `REVIEW` 依赖范围。
 - CSV 校验命令和结果。
-- 下一步推荐使用 `/goal 根据 $workline-run 规范 执行 <tasks.csv>`。
+- 下一步先使用 `$workline-review` 审查 `tasks.csv`；审查通过后再使用 `/goal 根据 $workline-run 规范 执行 <tasks.csv>`。

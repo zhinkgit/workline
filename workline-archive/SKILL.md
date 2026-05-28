@@ -1,6 +1,6 @@
 ---
 name: workline-archive
-description: "归档已完成的 Workline 活动目录。Use when the user provides a Workline active directory and wants to check process completeness, ensure tasks.csv and run.md are closed, verify REVIEW and git_state conclusions, then move the directory to .workline/archive without copying external symlink targets."
+description: "归档已完成的 Workline 活动目录。Use when the user provides a Workline active directory and wants to check process completeness, ensure tasks.csv and run.md are closed, check reviews when present, verify REVIEW and git_state conclusions, then move the directory to .workline/archive without copying external symlink targets."
 ---
 
 # Workline Archive
@@ -41,6 +41,11 @@ python workline-run/scripts/workline_csv.py validate .workline/active/<slug>/tas
 - 所有 `skipped` 都在 `run.md` 中解释。
 - `REVIEW` 行已执行并闭环，或在用户确认下以可解释状态收口。
 
+如果存在 `reviews/`，检查：
+
+- 如果存在 `prd-review-*.md` 或 `tasks-review-*.md`，最新阶段结论不能是未解释的 `REVISE` 或 `BLOCKED`。
+- 如果用户明确跳过审查，`run.md` 或归档输出中必须说明跳过原因。
+
 ## 移动目录
 
 1. 计算目标路径 `.workline/archive/<slug>/`。
@@ -66,4 +71,4 @@ Move-Item -LiteralPath ".workline\active\<slug>" -Destination ".workline\archive
 
 - 归档源路径。
 - 归档目标路径。
-- CSV、`run.md` 和 REVIEW 检查结果。
+- CSV、`reviews/`、`run.md` 和 REVIEW 检查结果。
