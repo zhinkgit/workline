@@ -1,0 +1,4 @@
+interface:
+  display_name: "Workline Grill"
+  short_description: "逐问逐答澄清Workline需求并沉淀简洁PRD文件"
+  default_prompt: "Use $workline-grill to clarify the active Workline brief and write prd.md."

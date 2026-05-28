@@ -1,0 +1,4 @@
+interface:
+  display_name: "Workline Archive"
+  short_description: "检查Workline闭环状态并安全归档活动过程目录"
+  default_prompt: "Use $workline-archive to archive a completed .workline active directory."

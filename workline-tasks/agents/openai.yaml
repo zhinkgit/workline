@@ -1,0 +1,4 @@
+interface:
+  display_name: "Workline Tasks"
+  short_description: "从Workline PRD拆分可验证任务并生成CSV"
+  default_prompt: "Use $workline-tasks to turn this Workline prd.md into a validated tasks.csv."

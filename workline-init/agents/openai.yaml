@@ -1,0 +1,4 @@
+interface:
+  display_name: "Workline Init"
+  short_description: "初始化独立Workline长任务过程目录和材料入口"
+  default_prompt: "Use $workline-init to create a new .workline active directory from this rough requirement."
