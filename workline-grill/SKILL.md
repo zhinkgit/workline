@@ -27,9 +27,9 @@ description: "Workline 需求澄清与 PRD 生成。Use when the user provides a
 
 ## 工作流
 
-1. 读取 `brief.md`，保留其中原始需求；只追加补充整理，不覆盖原始需求。
+1. 只读取 `brief.md`，不修改 `brief.md`；在 `prd.md` 中保留原始需求摘要，并追加澄清结论。
 2. 扫描 `references/` 的一级内容，优先自行查证能从仓库或参考资料判断的问题。
-3. 使用 `templates/prd.md` 作为 `prd.md` 模板。
+3. 在活动目录下创建或更新 `prd.md`，并使用 `templates/prd.md` 作为模板。
 4. 每次只问一个关键问题。
 5. 每个问题都给出推荐答案或推荐取舍，不只把问题抛回用户。
 6. 将影响需求、边界、验收或取舍的结论写入 `prd.md` 的“关键决策与澄清记录”。
