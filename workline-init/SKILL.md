@@ -39,7 +39,6 @@ python workline-init/scripts/init_workline.py --root . --slug bulk-import --brie
 - 不生成 `tasks.csv`。
 - 不执行代码。
 - 不主动追问需求。
-- 不调用 OpenSpec、Trellis、Mission、`to-prd`、`to-issues` 或其它规划工作流。
 - 不覆盖已有活动目录；如果目标目录已存在，停止并报告。
 
 ## 输出

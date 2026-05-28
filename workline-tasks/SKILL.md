@@ -73,7 +73,6 @@ python workline-tasks/scripts/workline_csv.py validate .workline/active/<slug>/t
 
 - 不实现代码。
 - 不执行任务验证命令。
-- 不调用 OpenSpec、Trellis、Mission、`to-prd`、`to-issues` 或其它规划工作流。
 - 不降低 PRD 验收标准。
 - 不把待确认问题拆成看似可执行的任务。
 
