@@ -56,10 +56,8 @@ Move-Item -LiteralPath ".workline\active\<slug>" -Destination ".workline\archive
 
 ## 硬约束
 
-- 不补做任务。
 - 不伪造日志。
 - 不覆盖已有归档目录。
-- 不复制软链接或 Junction 指向的外部内容。
 - 如果闭环条件不满足，停止并列出具体缺口。
 
 ## 输出

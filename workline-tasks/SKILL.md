@@ -72,7 +72,6 @@ python workline-tasks/scripts/workline_csv.py validate .workline/active/<slug>/t
 ## 硬约束
 
 - 不实现代码。
-- 不执行任务验证命令。
 - 不降低 PRD 验收标准。
 - 不把待确认问题拆成看似可执行的任务。
 

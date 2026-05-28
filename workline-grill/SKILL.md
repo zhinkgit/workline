@@ -54,8 +54,6 @@ description: "Workline 需求澄清与 PRD 生成。Use when the user provides a
 
 ## 硬约束
 
-- 不生成 `tasks.csv`。
-- 不执行代码。
 - 不把完整聊天流水写入 PRD；只保留关键问答和决策。
 
 ## 输出

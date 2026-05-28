@@ -35,10 +35,6 @@ python workline-init/scripts/init_workline.py --root . --slug bulk-import --brie
 
 ## 硬约束
 
-- 不生成 `prd.md`。
-- 不生成 `tasks.csv`。
-- 不执行代码。
-- 不主动追问需求。
 - 不覆盖已有活动目录；如果目标目录已存在，停止并报告。
 
 ## 输出
