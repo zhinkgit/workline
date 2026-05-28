@@ -106,7 +106,7 @@ workline/
 
 `references/` 默认只保留一级目录，用于放参考仓库软链接、旧代码、网页资料、协议文档、用户提供的文件，以及运行过程中产生的中间产物或验证产物。若某个任务产生多个关联文件，允许创建按任务编号命名的浅层目录，例如 `references/T003-build/`，避免把多文件产物摊平成一堆难追踪文件。
 
-每个引用和产物的来源、用途、创建方式和是否需要归档，记录在 `prd.md` 末尾的“参考与产物记录”章节中，不额外增加 `references.md`。
+输入资料的来源、用途和是否需要归档，记录在 `prd.md` 末尾的“参考资料记录”章节中，不额外增加 `references.md`。运行过程中产生的 build log、截图、验证结果、临时文件和其它产物，不写入 `prd.md`；应登记到 `run.md`，必要时在 `tasks.csv` 的 `refs` 字段中引用。
 
 ## 6. Skill 划分
 
@@ -138,7 +138,7 @@ workline/
 - 使用 `workline-grill/templates/prd.md` 作为 PRD 模板。
 - 通过逐问逐答澄清需求。
 - 将澄清结论、关键决策和必要问答写入 `prd.md`。
-- 补充 `prd.md` 末尾的“参考与产物记录”。
+- 补充 `prd.md` 末尾的“参考资料记录”。
 
 硬约束：
 
@@ -209,7 +209,7 @@ workline/
 职责：
 
 - 检查 Workline 过程文件是否完整。
-- 检查 CSV 状态是否闭环。
+- 检查 CSV 状态是否已闭环或已确认跳过。
 - 检查 `run.md` 是否说明阻塞、跳过、失败项和最终 REVIEW 结论。
 - 将目录从 `.workline/active/<slug>/` 移动到 `.workline/archive/<slug>/`。
 
@@ -247,7 +247,7 @@ workline/
 
 ## 风险与待确认问题
 
-## 参考与产物记录
+## 参考资料记录
 ```
 
 进入任务拆分前，`prd.md` 必须满足：
@@ -258,17 +258,18 @@ workline/
 - 验收标准可验证。
 - 关键决策有来源。
 - 关键决策与澄清记录只保留影响需求、边界、验收和取舍的关键问答，不保存完整聊天流水。
-- 每个引用或运行产物都有来源、用途和是否需要归档的说明。
+- 每个输入资料都有来源、用途和是否需要归档的说明。
 - 风险与待确认问题中不存在阻塞任务拆分的未闭环问题。
 
-“参考与产物记录”用于登记 `references/` 下的内容，推荐格式：
+“参考资料记录”用于登记进入需求澄清和任务拆分阶段的输入资料，推荐格式：
 
 ```md
 | 路径 | 类型 | 来源/创建方式 | 用途 | 是否归档 |
 | --- | --- | --- | --- | --- |
 | references/example.zip | 用户资料 | 用户提供 | 协议字段核对 | 是 |
-| references/T003-build/build-log.txt | 运行产物 | T003 构建命令输出 | 构建失败复盘 | 是 |
 ```
+
+运行阶段新增的 build log、截图、验证结果、临时文件和其它产物应登记在 `run.md`，并可通过 `tasks.csv.refs` 关联到具体任务，不再回写到 `prd.md`。
 
 ## 8. CSV 任务模型
 
@@ -292,10 +293,10 @@ id,depends_on,mode,title,description,acceptance_criteria,verification,dev_state,
 | `dev_state` | 开发状态 |
 | `review_state` | 初始检查状态 |
 | `git_state` | 提交状态，只记录当前任务是否已提交、无需提交或仍待处理 |
-| `refs` | 相关 PRD 章节、参考资料或运行产物 |
+| `refs` | 相关 PRD 章节、参考资料或运行产物引用 |
 | `notes` | 备注 |
 
-`git_state` 只记录任务级提交状态。用户可以手动提交；提交完成后，将对应任务的 `git_state` 更新为 `committed`。如果任务没有需要提交的变更，则更新为 `not_needed`。
+`git_state` 只记录任务级提交状态，用于归档前检查，不参与任务闭环和依赖满足判断。用户可以手动提交；提交完成后，将对应任务的 `git_state` 更新为 `committed`。如果任务没有需要提交的变更，则更新为 `not_needed`。
 
 状态枚举：
 
@@ -310,8 +311,9 @@ git_state: pending | committed | not_needed | blocked | skipped
 ```text
 dev_state = done
 review_state = passed
-git_state = committed 或 not_needed
 ```
+
+`git_state` 不属于任务闭环硬条件，但归档前必须说明每条任务的最终提交状态。
 
 状态转换规则：
 
@@ -319,21 +321,22 @@ git_state = committed 或 not_needed
 - 执行任务前必须先将 `dev_state` 从 `todo` 更新为 `doing`。
 - 任务完成实现和验证后，才能将 `dev_state` 更新为 `done`。
 - 验证通过且没有发现任务内问题时，才能将 `review_state` 更新为 `passed`。
-- 验证失败或初步检查失败时，应将对应状态更新为 `failed` 或 `blocked`，并在 `notes` 和 `run.md` 中记录原因。
+- 验证失败或初步检查失败时，不得把 `dev_state` 标为 `done`。如果仍可继续修复，保持或更新为 `dev_state=doing`；如果当前条件不足导致无法继续，更新为 `dev_state=blocked`。同时将 `review_state` 更新为 `failed`，并在 `notes` 和 `run.md` 中记录原因。
 - `blocked` 表示当前条件不足，后续是否能继续取决于依赖关系；`skipped` 表示经用户确认或 PRD 允许后跳过。
 - `HITL` 任务需要人工输入、实机操作、账号权限或关键确认时，不得伪装为 `AFK` 自动完成。
 
 依赖满足规则：
 
-- 只有依赖任务达到闭环条件时，后续任务才视为依赖满足。
-- 依赖任务如果是 `blocked` 或 `skipped`，后续任务默认不可执行，除非 `run.md` 明确记录用户确认或 PRD 允许继续。
+- 依赖任务达到闭环条件时，后续任务视为依赖满足。
+- 依赖任务如果是 `skipped`，视为依赖已满足，因为跳过本身必须来自用户确认或 PRD 允许。
+- 依赖任务如果是 `blocked`，后续任务不可执行，直到阻塞被解除或任务被用户确认改为 `skipped`。
 - `next` 应按 CSV 顺序返回第一条依赖已满足且 `dev_state` 为 `todo` 或 `doing` 的任务。
 
 `REVIEW` 行语义：
 
 - `REVIEW` 必须是最后一行，且依赖所有非 `REVIEW` 任务。
-- `REVIEW` 只在所有非 `REVIEW` 任务进入终态后执行，终态包括闭环、已解释的 `blocked` 或已确认的 `skipped`。
-- `REVIEW` 需要检查 PRD 覆盖、CSV 状态、验证记录、`run.md` 证据、失败/跳过解释和 `git_state` 是否闭环。
+- `REVIEW` 只在所有非 `REVIEW` 任务进入终态后执行，终态包括闭环或已确认的 `skipped`。存在 `blocked` 任务时，`REVIEW` 不可执行。
+- `REVIEW` 需要检查 PRD 覆盖、CSV 状态、验证记录、`run.md` 证据、失败/跳过解释和 `git_state` 是否已有归档前结论。
 - `REVIEW` 不能补做实现任务；发现缺口时只能记录问题、更新状态，并按需要请求用户确认。
 
 ## 9. 模板与脚本
@@ -423,8 +426,8 @@ CSV 脚本职责：
 
 - `run.md` 存在。
 - `run.md` 已包含最终 REVIEW 结论。
-- `tasks.csv` 没有无解释的 `todo`、`doing`、`pending`、`failed`。
-- `blocked` 和 `skipped` 都在 `run.md` 中解释。
+- `tasks.csv` 没有 `todo`、`doing`、`failed`、`blocked`，也没有无解释的 `pending`。
+- `skipped` 都在 `run.md` 中解释。
 - `run.md` 已说明 `git_state` 的最终状态，尤其是用户手动提交或无需提交的原因。
 - `REVIEW` 行已执行。
 
