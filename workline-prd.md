@@ -85,7 +85,7 @@ workline/
 - `prd.md` 模板归 `workline-grill`，因为 PRD 是 grill 阶段产物。
 - `tasks.csv` 模板归 `workline-tasks`，因为任务 CSV 是 tasks 阶段产物。
 - `workline_csv.py` 在 `workline-tasks` 和 `workline-run` 下各保留一份：前者用于生成后校验，后者用于 `/goal` 执行期间校验、更新和恢复。
-- 两份 `workline_csv.py` 必须保持行为一致；修改其中一份时必须同步另一份。
+- 两份 `workline_csv.py` 必须保持实现一致；修改其中一份时必须直接同步另一份。
 
 项目内过程目录最终形态：
 
@@ -104,7 +104,7 @@ workline/
 
 活动目录命名格式为 `YYYY-MM-DD-HHMM-brief-slug`，避免同一天多个任务重名。
 
-`references/` 只保留一级目录，用于放参考仓库软链接、旧代码、网页资料、协议文档、用户提供的文件，以及运行过程中产生的中间产物或验证产物。默认不再拆子目录。
+`references/` 默认只保留一级目录，用于放参考仓库软链接、旧代码、网页资料、协议文档、用户提供的文件，以及运行过程中产生的中间产物或验证产物。若某个任务产生多个关联文件，允许创建按任务编号命名的浅层目录，例如 `references/T003-build/`，避免把多文件产物摊平成一堆难追踪文件。
 
 每个引用和产物的来源、用途、创建方式和是否需要归档，记录在 `prd.md` 末尾的“参考与产物记录”章节中，不额外增加 `references.md`。
 
@@ -116,7 +116,7 @@ workline/
 
 - 接收用户粗需求。
 - 创建 `.workline/active/<timestamp-slug>/`。
-- 创建空的 `brief.md`，供用户手工补充原始需求。
+- 创建 `brief.md`，写入用户原始粗需求、创建时间和待补充材料提示，供用户继续手工补充。
 - 创建一级 `references/`。
 - 返回新建活动目录路径，提示用户把参考资料、旧代码、协议文档或其它输入材料放入 `references/`。
 
@@ -142,7 +142,7 @@ workline/
 
 硬约束：
 
-- `brief.md` 和 `references/` 是澄清阶段的输入材料。
+- `brief.md` 和 `references/` 是澄清阶段的输入材料；`brief.md` 中的原始需求不得被覆盖，只能追加整理后的补充信息。
 - 不生成 `tasks.csv`。
 - 不执行代码。
 - 不调用其它规划工作流。
@@ -183,7 +183,7 @@ workline/
 硬约束：
 
 - `tasks.csv` 是执行状态源。
-- `workline-run` 不重新实现调度器，不替代 `/goal`；它只提供 `/goal` 必须遵守的执行规则、状态更新规则和日志规则。
+- `workline-run` 是 `/goal` 的执行规则包，不是执行器；它不重新实现调度器，不替代 `/goal`，只提供 `/goal` 必须遵守的执行规则、状态更新规则和日志规则。
 - 每条任务必须真实实现、真实验证、真实回归。
 - 不用假数据、空跑、只读代码或“看起来可以”冒充通过。
 - 不吞错、不删除测试、不绕过校验、不降低验收标准。
@@ -192,16 +192,17 @@ workline/
 推荐执行方式：
 
 ```text
-/goal 使用 workline-run 执行 .workline/active/<slug>/tasks.csv
+/goal 根据 workline-run 规范 执行 .workline/active/<slug>/tasks.csv
 ```
 
 实现方式：
 
-- `workline-run/SKILL.md` 明确写成 `/goal` 规则包：先读 `prd.md`、`tasks.csv`，再按可解析 CSV 的状态逐条推进。
+- `workline-run/SKILL.md` 明确写成 `/goal` 执行规则：先读 `prd.md`、`tasks.csv`，再按可解析 CSV 的状态逐条推进。
 - 用户主动调用 Skill 时必须带上活动目录或 `tasks.csv` 路径，例如 `.workline/active/2026-05-28-0915-example/`，Skill 不需要猜测当前 active 任务。
 - 进入 `/goal` 前，必须运行 `workline-run/scripts/workline_csv.py validate`；校验失败时先修复 CSV，不开始执行。
 - 每次任务状态变化必须通过 CSV 脚本更新，减少手工编辑导致的转义错误和状态漂移。
 - `/goal` 执行时只把 `tasks.csv` 当作任务计划和状态源；人类审阅也直接审阅 `tasks.csv`。
+- `/goal` 的职责是执行任务本身，`workline-run` 的职责是规定执行前检查、下一任务选择、状态更新、日志记录、失败停止和恢复入口。
 
 ### 6.5 workline-archive
 
@@ -266,7 +267,7 @@ workline/
 | 路径 | 类型 | 来源/创建方式 | 用途 | 是否归档 |
 | --- | --- | --- | --- | --- |
 | references/example.zip | 用户资料 | 用户提供 | 协议字段核对 | 是 |
-| references/build-log.txt | 运行产物 | T003 构建命令输出 | 构建失败复盘 | 是 |
+| references/T003-build/build-log.txt | 运行产物 | T003 构建命令输出 | 构建失败复盘 | 是 |
 ```
 
 ## 8. CSV 任务模型
@@ -290,9 +291,11 @@ id,depends_on,mode,title,description,acceptance_criteria,verification,dev_state,
 | `verification` | 验证命令或人工检查方式 |
 | `dev_state` | 开发状态 |
 | `review_state` | 初始检查状态 |
-| `git_state` | 提交状态 |
+| `git_state` | 提交状态，只记录当前任务是否已提交、无需提交或仍待处理 |
 | `refs` | 相关 PRD 章节、参考资料或运行产物 |
 | `notes` | 备注 |
+
+`git_state` 只记录任务级提交状态。用户可以手动提交；提交完成后，将对应任务的 `git_state` 更新为 `committed`。如果任务没有需要提交的变更，则更新为 `not_needed`。
 
 状态枚举：
 
@@ -309,6 +312,29 @@ dev_state = done
 review_state = passed
 git_state = committed 或 not_needed
 ```
+
+状态转换规则：
+
+- 新任务默认 `dev_state=todo`、`review_state=pending`、`git_state=pending`。
+- 执行任务前必须先将 `dev_state` 从 `todo` 更新为 `doing`。
+- 任务完成实现和验证后，才能将 `dev_state` 更新为 `done`。
+- 验证通过且没有发现任务内问题时，才能将 `review_state` 更新为 `passed`。
+- 验证失败或初步检查失败时，应将对应状态更新为 `failed` 或 `blocked`，并在 `notes` 和 `run.md` 中记录原因。
+- `blocked` 表示当前条件不足，后续是否能继续取决于依赖关系；`skipped` 表示经用户确认或 PRD 允许后跳过。
+- `HITL` 任务需要人工输入、实机操作、账号权限或关键确认时，不得伪装为 `AFK` 自动完成。
+
+依赖满足规则：
+
+- 只有依赖任务达到闭环条件时，后续任务才视为依赖满足。
+- 依赖任务如果是 `blocked` 或 `skipped`，后续任务默认不可执行，除非 `run.md` 明确记录用户确认或 PRD 允许继续。
+- `next` 应按 CSV 顺序返回第一条依赖已满足且 `dev_state` 为 `todo` 或 `doing` 的任务。
+
+`REVIEW` 行语义：
+
+- `REVIEW` 必须是最后一行，且依赖所有非 `REVIEW` 任务。
+- `REVIEW` 只在所有非 `REVIEW` 任务进入终态后执行，终态包括闭环、已解释的 `blocked` 或已确认的 `skipped`。
+- `REVIEW` 需要检查 PRD 覆盖、CSV 状态、验证记录、`run.md` 证据、失败/跳过解释和 `git_state` 是否闭环。
+- `REVIEW` 不能补做实现任务；发现缺口时只能记录问题、更新状态，并按需要请求用户确认。
 
 ## 9. 模板与脚本
 
@@ -347,11 +373,13 @@ CSV 脚本职责：
 - 检查 CSV 是否可被标准 CSV 解析器读取。
 - 检查 `id` 唯一，最后一行是 `REVIEW`。
 - 检查 `depends_on` 引用的任务存在。
+- 检查 `REVIEW` 为最后一行，且依赖所有非 `REVIEW` 任务。
 - 检查 `mode` 属于 `AFK` 或 `HITL`。
 - 检查状态值属于允许枚举。
 - 检查非 `REVIEW` 任务存在验收标准和验证方式。
+- `set` 命令检查状态转换是否符合规则，避免从 `todo` 直接跳到 `done` 后缺少执行记录。
+- `next` 命令检查依赖满足情况，并按 CSV 顺序输出下一条可执行任务，供 `/goal` 恢复时定位。
 - 原子更新单行状态字段，避免手工编辑破坏 CSV 转义。
-- 输出下一条可执行任务，供 `/goal` 恢复时定位。
 
 ## 10. 阶段门禁
 
@@ -386,6 +414,7 @@ CSV 脚本职责：
 - CSV 可被标准 CSV 解析器读取。
 - 每条非 REVIEW 任务都有验收标准和验证方式。
 - 最后一行是 `REVIEW`。
+- `REVIEW` 依赖所有非 `REVIEW` 任务。
 - CSV 已通过 `workline-run/scripts/workline_csv.py validate`。
 
 ### Run -> Archive
@@ -396,6 +425,7 @@ CSV 脚本职责：
 - `run.md` 已包含最终 REVIEW 结论。
 - `tasks.csv` 没有无解释的 `todo`、`doing`、`pending`、`failed`。
 - `blocked` 和 `skipped` 都在 `run.md` 中解释。
+- `run.md` 已说明 `git_state` 的最终状态，尤其是用户手动提交或无需提交的原因。
 - `REVIEW` 行已执行。
 
 ## 11. README 要求
@@ -408,7 +438,7 @@ CSV 脚本职责：
 - 项目内 `.workline/` 目录结构。
 - CSV 字段和状态闭环规则。
 - 各 Skill 自包含的模板和脚本。
-- CSV 校验和更新脚本的同步规则。
+- 两份 CSV 校验和更新脚本的同步规则。
 - 推荐使用步骤。
 - 明确不混用其它工作流。
 
