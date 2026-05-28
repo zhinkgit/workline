@@ -1,6 +1,6 @@
 ---
 name: workline-grill
-description: "Workline 需求澄清与 PRD 生成。Use when the user provides a Workline active directory and wants grill-style one-question-at-a-time clarification, wants to turn brief.md and references into prd.md, or wants a concise PRD before task splitting. Do not use for tasks.csv generation or implementation."
+description: "Workline 需求澄清与 PRD 生成。Use when the user provides a Workline active directory, answers an in-progress Workline Grill clarification question, wants grill-style one-question-at-a-time clarification, wants to turn brief.md and references into prd.md, or wants a concise PRD before task splitting. Do not use for tasks.csv generation or implementation."
 ---
 
 # Workline Grill
@@ -35,10 +35,19 @@ description: "Workline 需求澄清与 PRD 生成。Use when the user provides a
 6. 将影响需求、边界、验收或取舍的结论写入 `prd.md` 的“关键决策与澄清记录”。
 7. 将输入资料写入 `prd.md` 末尾“参考资料记录”，记录路径、类型、来源/创建方式、用途和是否归档。
 
+## 澄清循环
+
+- 读取输入资料后，先在内部形成待澄清问题队列，按阻塞程度排序：目标和非目标、范围边界、输入输出、用户流程、验收标准、风险与依赖。
+- 不要一次性输出完整问题清单；只问当前最关键的一个问题。
+- 提问后等待用户回答；用户回答后，继续同一轮 Workline Grill，不要把一次回答当作流程完成。
+- 每次收到回答后，先更新 `prd.md` 的相关章节和“关键决策与澄清记录”，再判断是否还有阻塞任务拆分的问题。
+- 只要仍有阻塞任务拆分的问题，就继续提出下一个问题。
+- 只有当 `prd.md` 满足“PRD 完成条件”且没有阻塞任务拆分的未闭环问题时，才能进入最终输出。
+
 ## 用户选择工具
 
-- 当运行环境提供 `AskUserQuestion`、`request_user_input` 或同类选择式提问工具时，优先用于需要用户在 3-4 个互斥方案中选择的关键问题。
-- 每次仍只提出一个关键问题；推荐选项放第一，另外给 2-3 个可选方案，并用一句话说明取舍。
+- 当运行环境提供 `AskUserQuestion`、`request_user_input` 或同类选择式提问工具时，优先用于需要用户在 2-3 个互斥方案中选择的关键问题。
+- 每次仍只提出一个关键问题；推荐选项放第一，另外给 1-2 个可选方案，并用一句话说明取舍。
 - 不使用选择式提问工具询问可通过 `brief.md`、`references/` 或仓库自行判断的问题。
 - 如果选择式提问工具不可用，退回普通文本问答，但仍给出推荐答案或推荐取舍。
 
