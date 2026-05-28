@@ -126,50 +126,8 @@ review_state = passed
 
 ## 审查与多 AI 复核
 
-`workline-review` 可以在本对话中直接审查，也可以承接其它 AI 或人工审查意见。推荐做法是把外部审查结果保存到 `reviews/`，然后再让 `$workline-review` 汇总判断。
+阶段审查统一使用 `$workline-review`。在本对话中审查时，直接提供活动目录；交给其它 AI 工具复核时，也让它调用 `workline-review` Skill，并把审查报告写入活动目录的 `reviews/`。
 
-给其它 AI 审查 PRD 时，可以使用：
-
-```text
-请审查这个 Workline PRD。只做审查，不要改文件。
-
-活动目录：
-.workline/active/<slug>/
-
-重点阅读：
-- brief.md
-- prd.md
-- references/ 下相关资料
-
-请输出：
-1. 阻塞问题
-2. 需求歧义
-3. 非目标是否清楚
-4. 验收标准是否可验证
-5. 是否可以进入 tasks.csv 拆分
-6. 建议修改项
-```
-
-给其它 AI 审查任务拆分时，可以使用：
-
-```text
-请审查这个 Workline tasks.csv。只做审查，不要改文件。
-
-活动目录：
-.workline/active/<slug>/
-
-重点阅读：
-- prd.md
-- tasks.csv
-- reviews/ 下已有 PRD 审查结论
-
-请输出：
-1. CSV 结构和依赖问题
-2. 是否遗漏 PRD 要求
-3. 每个任务是否足够小且可验证
-4. AFK/HITL 分类是否合理
-5. REVIEW 行是否完整
-6. 是否可以进入 /goal 执行
-```
+人工审查意见也可以保存到 `reviews/`，再由 `$workline-review` 汇总判断。
 
 Workline 不混用其它规划工作流。若项目已有测试、构建或提交规范，执行阶段继续遵守项目自身规范。
