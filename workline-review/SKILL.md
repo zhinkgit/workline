@@ -102,59 +102,16 @@ python workline-tasks/scripts/workline_csv.py summary .workline/active/<slug>/ta
 - `REVISE`：需要回到 `$workline-tasks` 修订 `tasks.csv`。
 - `BLOCKED`：PRD 或任务定义存在阻塞问题，执行暂缓。
 
-## 已有审查意见处理
+## 报告生成
 
-当用户提供其它 AI 或人工审查意见时：
+使用 `templates/review.md` 生成审查报告，写入 `reviews/`：
 
-1. 读取被审查对象和审查意见。
-2. 将意见分成：
-   - 阻塞问题
-   - 应修订问题
-   - 可选建议
-   - 误报或不采纳意见
-3. 对每条意见给出处理建议和依据。
-4. 不直接修改 `prd.md` 或 `tasks.csv`，除非用户明确要求本次同时修订。
-5. 需要修订时，明确交给 `$workline-grill` 或 `$workline-tasks`。
-
-## 审查报告格式
-
-审查报告写入 `reviews/`，使用以下结构：
-
-```markdown
-# Workline Review
-
-## 基本信息
-
-- 审查目标：
-- 审查时间：
-- 活动目录：
-- 输入文件：
-- 阶段结论：PASS / REVISE / BLOCKED
-
-## 阻塞问题
-
-## 需要修订的问题
-
-## 可选建议
-
-## 覆盖检查
-
-## 状态快照
-
-- 命令：
-- 是否运行：
-- 发现的非初始状态：
-- 处理结论：
-
-## 建议下一步
-```
+- PRD 审查：`reviews/prd-review-YYYY-MM-DD-HHMM.md`
+- Tasks 审查：`reviews/tasks-review-YYYY-MM-DD-HHMM.md`
 
 ## 硬约束
 
 - 审查只形成阶段结论和修订建议。
-- `prd.md` 仍是任务拆分的需求源。
-- `prd.md` 的验收标准保持原样。
-- 已有 review 文件保留；同一分钟重名时追加短后缀。
 - 审查报告只保留关键问题、判断和建议。
 
 ## 输出

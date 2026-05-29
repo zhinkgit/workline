@@ -20,7 +20,6 @@ description: "归档已完成的 Workline 活动目录。Use when the user provi
 - `tasks.csv`
 - `run.md`
 - `references/`
-- `evidence/`，如果执行阶段产生了需要保留的过程物
 
 运行 CSV 校验：
 
