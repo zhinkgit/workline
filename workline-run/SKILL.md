@@ -19,7 +19,7 @@ description: "Workline 的 /goal 长任务执行规则包。Use when the user in
 
 ## 执行前检查
 
-1. 定位活动目录、`prd.md`、`tasks.csv`、`references/`。
+1. 定位活动目录、`prd.md`、`tasks.csv`、`references/` 和 `evidence/`；如果旧活动目录缺少 `evidence/`，先创建。
 2. 运行：
 
 ```bash
@@ -51,7 +51,16 @@ python workline-run/scripts/workline_csv.py set <tasks.csv> T001 --dev_state doi
 python workline-run/scripts/workline_csv.py set <tasks.csv> T001 --dev_state done --review_state passed --git_state not_needed --append-notes "verified"
 ```
 
-8. 如果任务产生 build log、截图、验证结果或其它产物，把文件放入 `references/` 或 `references/<task-id>-<name>/`，并通过 `--append-refs` 关联。
+8. 如果任务产生 build log、截图、验证结果、配置快照、部署包或其它执行产物，把文件放入 `evidence/<task-id>-<name>/`，并通过 `--append-refs` 关联。`references/` 只放 PRD / grill 输入材料，不放执行证据。
+
+多轮实机验证或多次尝试时，在同一个任务证据目录下按尝试分组，例如：
+
+```text
+evidence/T012-board-check/
+├── attempt-01-timeout/
+├── attempt-02-new-ip/
+└── smoke/
+```
 
 ## 失败与阻塞
 

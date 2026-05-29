@@ -20,6 +20,7 @@ description: "归档已完成的 Workline 活动目录。Use when the user provi
 - `tasks.csv`
 - `run.md`
 - `references/`
+- `evidence/`，如果执行阶段产生了证据
 
 运行 CSV 校验：
 
@@ -50,7 +51,7 @@ python workline-run/scripts/workline_csv.py validate .workline/active/<slug>/tas
 
 1. 计算目标路径 `.workline/archive/<slug>/`。
 2. 如果目标路径已存在，停止；不要覆盖。
-3. 使用移动操作移动活动目录；不要复制 `references/` 下软链接或 Junction 指向的外部内容。
+3. 使用移动操作移动活动目录；不要复制 `references/` 或 `evidence/` 下软链接、Junction 指向的外部内容。
 4. 移动后确认 active 路径不存在、archive 路径存在。
 
 PowerShell 示例：
@@ -71,4 +72,4 @@ Move-Item -LiteralPath ".workline\active\<slug>" -Destination ".workline\archive
 
 - 归档源路径。
 - 归档目标路径。
-- CSV、`reviews/`、`run.md` 和 REVIEW 检查结果。
+- CSV、`reviews/`、`run.md`、`evidence/`（如存在）和 REVIEW 检查结果。

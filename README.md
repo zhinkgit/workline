@@ -55,7 +55,8 @@ workline/
 │       ├── prd.md
 │       ├── tasks.csv
 │       ├── run.md
-│       ├── references/
+│       ├── references/          # PRD / grill 输入材料
+│       ├── evidence/            # 执行阶段按需创建
 │       └── reviews/              # 由 workline-review 按需创建
 │           ├── prd-review-2026-05-28-0915.md
 │           └── tasks-review-2026-05-28-1015.md
@@ -63,7 +64,20 @@ workline/
     └── 2026-05-28-0915-example/
 ```
 
-活动目录命名为 `YYYY-MM-DD-HHMM-brief-slug`。`references/` 默认保持浅层结构，用来放参考仓库软链接、旧实现、网页资料、协议文档、用户文件，以及执行过程中产生的中间产物。多个关联产物可放入 `references/T003-build/` 这类任务编号目录。
+活动目录命名为 `YYYY-MM-DD-HHMM-brief-slug`。
+
+`references/` 默认保持浅层结构，只放进入 PRD / grill 阶段所需的输入材料，例如参考仓库软链接、旧实现、网页资料、协议文档和用户文件。它不再承载执行阶段产生的日志、截图、部署包或烟测记录。
+
+`evidence/` 由 `$workline-run` 在执行阶段按需创建，用来放 `/goal` 执行阶段产生的证据和中间产物，例如测试日志、构建日志、截图、配置快照、部署包、板端烟测记录。普通任务使用 `evidence/T003-config-manager/` 这类任务编号目录；多轮实机验证或多次尝试时，在任务目录下继续按尝试分组，例如：
+
+```text
+evidence/T012-board-check/
+├── attempt-01-timeout/
+├── attempt-02-new-ip/
+└── smoke/
+```
+
+`tasks.csv` 的 `refs` 字段可以同时引用 `prd.md`、`references/...` 和 `evidence/...`。
 
 `reviews/` 由 `workline-review` 按需创建，用来放 Workline 自审、人工审查或其它 AI 审查结果。审查报告不是新的需求源；它只指出 `prd.md` 或 `tasks.csv` 是否需要回到上一个阶段修订。
 

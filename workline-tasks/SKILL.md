@@ -41,7 +41,7 @@ description: "根据 Workline PRD 生成或修订可执行 tasks.csv。Use when 
   - `notes`
 - 默认状态为 `dev_state=todo`、`review_state=pending`、`git_state=pending`。
 - `mode=AFK` 表示可自动执行；`mode=HITL` 表示需要人工输入、实机操作、账号权限或关键确认。
-- `refs` 引用 PRD 章节、参考资料或后续运行产物路径。
+- `refs` 引用 PRD 章节、`references/...` 输入材料或后续 `evidence/...` 运行证据路径。
 - 最后一行必须是 `REVIEW`，并依赖所有非 `REVIEW` 任务。
 
 ## CSV 生成

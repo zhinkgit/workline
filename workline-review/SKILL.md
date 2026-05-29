@@ -23,6 +23,7 @@ description: "审查 Workline 阶段产物并形成阶段门禁结论。Use when
 
 - `brief.md` 存在。
 - `references/` 存在。
+- `evidence/` 不要求预先存在；执行阶段已有证据时再检查。
 - 审查 PRD 时，`prd.md` 存在。
 - 审查任务时，`prd.md` 和 `tasks.csv` 都存在。
 - `reviews/` 不存在时创建；不要覆盖已有审查记录。
@@ -72,7 +73,8 @@ description: "审查 Workline 阶段产物并形成阶段门禁结论。Use when
 
 - `prd.md`
 - `tasks.csv`
-- `references/` 一级目录和必要文件
+- `references/` 一级目录和必要输入材料
+- 已存在的 `evidence/` 任务证据目录
 - 已有 `reviews/tasks-review-*.md` 或用户指定的审查意见
 
 先运行 CSV 校验；优先使用当前仓库中的脚本：
@@ -91,6 +93,7 @@ python workline-tasks/scripts/workline_csv.py validate .workline/active/<slug>/t
 - `mode=AFK/HITL` 是否合理，人工输入、实机操作、账号权限是否被标为 HITL。
 - `REVIEW` 行是否最后一行，并依赖所有非 `REVIEW` 任务。
 - `verification` 是否是真实可执行的验证命令或人工检查，不是空泛描述。
+- 已执行任务的验证产物是否优先落在 `evidence/<task-id>-<name>/`，而不是混入 `references/`。
 
 结论：
 
