@@ -99,7 +99,7 @@ python workline-tasks/scripts/workline_csv.py summary .workline/active/<slug>/ta
 - 已执行任务的验证产物是否优先落在 `evidence/<task-id>-<name>/`，而不是混入 `references/`。
 - 已执行任务是否在 `refs` 或 `notes` 中标明机读证据等级，例如 `[evidence:local]`、`[evidence:sim]`、`[evidence:target]`、`[evidence:real]`、`[evidence:manual]`；只写在 `run.md` 中不算通过。如果产生了过程物，还应引用 `evidence/...` 路径。
 - `mode=HITL` 的任务是否具备人工、目标环境或真实链路证据；只有 `[evidence:target]` 时，是否明确说明未覆盖真实设备或真实 ACK。
-- `summary` 输出的 `git-pending`、`skipped-or-blocked`、缺证据路径、缺证据等级等 warnings 是否已有解释或需要修订。
+- `summary` 输出的 `git-pending`、`skipped-or-blocked`、缺证据路径、缺证据等级等 warnings 是否已有解释或需要修订；其中 `git_state=blocked` 表示验证已通过但自动提交未闭环，不应反向否定任务验证结论。
 
 结论：
 

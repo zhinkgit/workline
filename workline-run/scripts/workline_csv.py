@@ -32,7 +32,7 @@ HEADERS = [
 MODES = {"AFK", "HITL"}
 DEV_STATES = {"todo", "doing", "done", "blocked", "skipped"}
 VERIFY_STATES = {"pending", "passed", "failed", "blocked", "skipped"}
-GIT_STATES = {"pending", "committed", "not_needed", "blocked", "skipped"}
+GIT_STATES = {"pending", "done", "blocked"}
 TERMINAL_DEV_STATES = {"done", "blocked", "skipped"}
 EVIDENCE_TAG_PATTERN = re.compile(r"\[evidence:([A-Za-z0-9_-]+)\]")
 DEFAULT_EVIDENCE_LEVELS = [
@@ -348,7 +348,7 @@ def build_summary(rows: list[dict[str, str]]) -> dict[str, object]:
         if (
             row["dev_state"] in {"blocked", "skipped"}
             or row["verify_state"] in {"failed", "blocked", "skipped"}
-            or row["git_state"] in {"blocked", "skipped"}
+            or row["git_state"] == "blocked"
         ):
             warnings.append(
                 {
@@ -383,14 +383,12 @@ def build_summary(rows: list[dict[str, str]]) -> dict[str, object]:
                 for row in non_review
                 if row["dev_state"] == "skipped"
                 or row["verify_state"] == "skipped"
-                or row["git_state"] == "skipped"
             ),
             "ids": [
                 row["id"]
                 for row in non_review
                 if row["dev_state"] == "skipped"
                 or row["verify_state"] == "skipped"
-                or row["git_state"] == "skipped"
             ],
         },
         "git_pending": {
@@ -499,6 +497,7 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
 
 

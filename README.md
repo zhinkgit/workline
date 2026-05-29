@@ -103,7 +103,7 @@ id,depends_on,mode,title,description,acceptance_criteria,verification,dev_state,
 | --- | --- |
 | `dev_state` | `todo`、`doing`、`done`、`blocked`、`skipped` |
 | `verify_state` | `pending`、`passed`、`failed`、`blocked`、`skipped` |
-| `git_state` | `pending`、`committed`、`not_needed`、`blocked`、`skipped` |
+| `git_state` | `pending`、`done`、`blocked` |
 
 正常任务闭环条件是：
 
@@ -114,7 +114,13 @@ verify_state = passed
 
 `skipped` 是例外收口：只有用户确认或 PRD 明确允许时才可使用，且必须在 `notes` 和 `run.md` 中说明依据。`skipped` 可以满足后续依赖，但不等同于已完成。
 
-`git_state` 不参与任务依赖满足判断，但归档前必须说明每条任务的最终提交状态。
+`git_state` 不参与任务依赖满足判断，也不影响后续任务继续执行。每个任务验证通过后，`$workline-run` 会自动尝试提交本任务的业务改动：
+
+- 没有业务改动需要提交：`git_state=done`。
+- 已成功提交任务相关业务改动：`git_state=done`，提交哈希写入 `notes` 或 `run.md`。
+- 工作区混有不相关改动、改动归属不清、提交失败或不是 Git 仓库：`git_state=blocked`，原因写入 `notes` 和 `run.md`。
+
+`git_state=blocked` 不改变 `dev_state=done` / `verify_state=passed` 的验证结论，也不阻止继续执行后续任务，但归档前必须处理完。
 
 `REVIEW` 行必须是最后一行，且依赖所有非 `REVIEW` 任务。它检查 PRD 覆盖、CSV 状态、验证记录、`run.md` 证据、失败/跳过解释和提交状态结论，不能补做实现任务。
 
@@ -149,6 +155,19 @@ python workline-run/scripts/workline_csv.py summary .workline/active/<slug>/task
 | `target-without-real` | 有 `target` 证据，但没有 `real` 证据 |
 | `git-pending` | 非 `REVIEW` 终态任务 `git_state=pending` |
 | `skipped-or-blocked` | 任务存在 `skipped`、`blocked` 或 `failed` 状态 |
+
+## Git 提交
+
+任务级提交由 `$workline-run` 在每条任务验证通过后自动尝试，只提交当前任务相关的业务代码、测试、文档或配置文件。任务级提交不提交 `.workline/active/...`、`.workline/archive/...`、`references/`、`evidence/` 或其它 Workline 过程材料。
+
+Workline 过程文件由 `$workline-archive` 在移动到 `.workline/archive/<slug>/` 后统一提交，并且只提交以下四个文件：
+
+- `.workline/archive/<slug>/brief.md`
+- `.workline/archive/<slug>/prd.md`
+- `.workline/archive/<slug>/tasks.csv`
+- `.workline/archive/<slug>/run.md`
+
+不提交 `references/`、`evidence/`、`reviews/`。
 
 ## 模板和脚本
 

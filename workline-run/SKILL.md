@@ -47,15 +47,27 @@ python workline-run/scripts/workline_csv.py set <tasks.csv> T001 --dev_state doi
 4. 按 PRD 和任务验收标准真实实现。
 5. 运行任务要求的验证命令或人工检查，并记录真实输出摘要。
 6. 将实现、验证命令、真实输出摘要、失败原因、阻塞项、运行产物路径和证据等级追加到 `run.md`。
-7. 验证通过后更新 `dev_state` 和 `verify_state`；`git_state` 必须按真实提交需求选择，不默认写成无需提交：
+7. 验证通过后先更新任务完成状态，`git_state` 保持 `pending`，表示提交收口还未完成：
 
 ```bash
 python workline-run/scripts/workline_csv.py set <tasks.csv> T001 --dev_state done --verify_state passed --git_state pending --append-notes "verified"
 ```
 
-   如果任务确实无需提交，才把 `git_state` 更新为 `not_needed`；如果已经提交，更新为 `committed`。
 8. 如果任务产生 build log、截图、验证结果、配置快照、部署包或其它执行产物，把文件放入 `evidence/<task-id>-<name>/`，并通过 `--append-refs` 关联。`references/` 只放 PRD / grill 输入材料，不放执行证据。
 9. 追加证据引用时，必须同时把轻量证据标签写入 `refs` 或 `notes`，例如 `[evidence:local]`、`[evidence:sim]`、`[evidence:target]`、`[evidence:real]`、`[evidence:manual]`；不要新增 CSV 字段。`run.md` 可以重复说明证据等级，但不能作为 `summary` 的机读输入。
+10. 验证通过后自动尝试提交本任务的业务改动：
+    - 先运行 `git status --short`，识别当前任务相关改动。
+    - 不提交 `.workline/active/...`、`.workline/archive/...`、`references/`、`evidence/` 或其它 Workline 过程文件。
+    - 不使用 `git add .`；只暂存能确认属于当前任务的业务代码、测试、文档或配置文件。
+    - 如果没有业务改动需要提交，将 `git_state` 更新为 `done`，并在 `notes` 或 `run.md` 说明 `no business changes`。
+    - 如果业务改动归属清晰，暂存相关文件并执行一次任务级提交，然后将 `git_state` 更新为 `done`，并记录提交哈希。
+    - 如果工作区混有不相关改动、改动归属不清、提交失败或当前不是 Git 仓库，将 `git_state` 更新为 `blocked`，在 `notes` 和 `run.md` 写明原因，然后继续执行后续任务。
+
+任务级提交信息推荐包含任务 ID，例如：
+
+```text
+workline: T003 完成批量导入校验
+```
 
 多轮实机验证或多次尝试时，在同一个任务证据目录下按尝试分组，例如：
 
@@ -83,6 +95,7 @@ evidence/T012-board-check/
 - 验证失败或初步检查失败时，不得把 `dev_state` 标为 `done`。
 - 如果可以继续修复，保持或更新为 `doing`，并在 `run.md` 记录失败证据。
 - 如果当前条件不足导致无法继续，更新为 `blocked`，同时把 `verify_state` 更新为 `failed` 或 `blocked`，并写明原因。
+- 自动提交失败不改变 `dev_state=done` 和 `verify_state=passed` 的验证结论，也不阻止继续执行后续任务；只把 `git_state` 更新为 `blocked`，归档前再处理。
 - `skipped` 只能来自用户确认或 PRD 明确允许；必须在 `notes` 和 `run.md` 记录依据。
 - 不吞错、不删除测试、不绕过校验、不降低验收标准。
 - 发现任务定义有缺陷时，记录缺陷并请求确认；不要擅自扩大范围。
@@ -98,7 +111,7 @@ REVIEW 需要检查：
 - 每条任务是否有验证记录、`run.md` 证据说明，以及 `refs` 或 `notes` 中的机读证据路径和标签。
 - `summary` warnings 是否已解释，尤其是证据标签缺失、HITL 证据不足和 `target` 未覆盖真实链路。
 - 失败、阻塞、跳过是否有解释。
-- `git_state` 是否已有归档前结论。
+- `git_state` 是否已有归档前结论；存在 `pending` 或 `blocked` 时，记录为归档前待处理问题，但不补做业务实现。
 
 REVIEW 不能补做实现任务。发现缺口时只能记录问题、更新状态，并按需要请求用户确认。
 
