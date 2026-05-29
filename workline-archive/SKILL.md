@@ -33,7 +33,7 @@ python workline-run/scripts/workline_csv.py summary .workline/active/<slug>/task
 
 - `git-pending`：归档前必须有提交状态结论。
 - `skipped-or-blocked`：必须在 `run.md` 中说明用户确认、客观阻塞或跳过依据。
-- `missing-evidence-ref` / `missing-evidence-level`：已完成任务必须能追溯到验证产物，并说明证据等级。
+- `missing-evidence-ref` / `missing-evidence-level`：已完成任务必须能从 `refs` 或 `notes` 追溯到验证产物，并带有 `[evidence:*]` 证据等级。
 - `hitl-without-manual-or-board-evidence`：HITL 任务必须有人工、板端或真实设备证据。
 - `board-smoke-without-real-device`：如果只有板端烟测，归档说明不能扩大为真实设备联调完成。
 
@@ -42,16 +42,16 @@ python workline-run/scripts/workline_csv.py summary .workline/active/<slug>/task
 - 已包含最终 REVIEW 结论。
 - 已说明阻塞、跳过、失败项。
 - 已说明每条任务的 `git_state` 最终状态，尤其是用户手动提交或无需提交的原因。
-- 已说明 `summary` warnings 的处理结论，或在归档输出中逐项说明。
+- 已说明 `summary` warnings 的处理结论；如果 warning 未解释，停止归档。
 
 检查 `tasks.csv`：
 
 - 不存在 `todo` 或 `doing`。
 - 不存在未解释的 `blocked`。
-- 不存在 `review_state=failed`。
+- 不存在 `verify_state=failed`。
 - 所有 `skipped` 都在 `run.md` 中解释。
-- `REVIEW` 行已执行并闭环，或在用户确认下以可解释状态收口。
-- 已完成任务的 `refs` 或 `notes` 优先包含 `evidence/` 路径和 `[evidence:*]` 标签；旧活动目录缺失标签时，必须在归档输出中说明这是历史证据格式，而不是伪造补齐。
+- `REVIEW` 行已执行并闭环。
+- 已完成任务的 `refs` 或 `notes` 必须包含 `evidence/` 路径和 `[evidence:*]` 标签。
 
 如果存在 `reviews/`，检查：
 
@@ -84,3 +84,4 @@ Move-Item -LiteralPath ".workline\active\<slug>" -Destination ".workline\archive
 - 归档源路径。
 - 归档目标路径。
 - CSV、`summary` warnings、`reviews/`、`run.md`、`evidence/`（如存在）和 REVIEW 检查结果。
+

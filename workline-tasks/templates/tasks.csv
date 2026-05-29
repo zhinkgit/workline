@@ -1,1 +1,2 @@
-id,depends_on,mode,title,description,acceptance_criteria,verification,dev_state,review_state,git_state,refs,notes
+id,depends_on,mode,title,description,acceptance_criteria,verification,dev_state,verify_state,git_state,refs,notes
+

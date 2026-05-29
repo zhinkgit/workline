@@ -23,7 +23,7 @@ HEADERS = [
     "acceptance_criteria",
     "verification",
     "dev_state",
-    "review_state",
+    "verify_state",
     "git_state",
     "refs",
     "notes",
@@ -31,7 +31,7 @@ HEADERS = [
 
 MODES = {"AFK", "HITL"}
 DEV_STATES = {"todo", "doing", "done", "blocked", "skipped"}
-REVIEW_STATES = {"pending", "passed", "failed", "blocked", "skipped"}
+VERIFY_STATES = {"pending", "passed", "failed", "blocked", "skipped"}
 GIT_STATES = {"pending", "committed", "not_needed", "blocked", "skipped"}
 TERMINAL_DEV_STATES = {"done", "blocked", "skipped"}
 EVIDENCE_TAG_PATTERN = re.compile(r"\[evidence:([A-Za-z0-9_-]+)\]")
@@ -95,7 +95,7 @@ def split_deps(value: str) -> list[str]:
 
 
 def is_closed(row: dict[str, str]) -> bool:
-    return row["dev_state"] == "done" and row["review_state"] == "passed"
+    return row["dev_state"] == "done" and row["verify_state"] == "passed"
 
 
 def dep_satisfied(row: dict[str, str]) -> bool:
@@ -121,9 +121,9 @@ def validate_rows(rows: list[dict[str, str]]) -> None:
             raise WorklineCsvError(f"{task_id}: invalid mode {row['mode']!r}")
         if row["dev_state"] not in DEV_STATES:
             raise WorklineCsvError(f"{task_id}: invalid dev_state {row['dev_state']!r}")
-        if row["review_state"] not in REVIEW_STATES:
+        if row["verify_state"] not in VERIFY_STATES:
             raise WorklineCsvError(
-                f"{task_id}: invalid review_state {row['review_state']!r}"
+                f"{task_id}: invalid verify_state {row['verify_state']!r}"
             )
         if row["git_state"] not in GIT_STATES:
             raise WorklineCsvError(f"{task_id}: invalid git_state {row['git_state']!r}")
@@ -133,11 +133,11 @@ def validate_rows(rows: list[dict[str, str]]) -> None:
                 raise WorklineCsvError(f"{task_id}: acceptance_criteria is required")
             if not row["verification"]:
                 raise WorklineCsvError(f"{task_id}: verification is required")
-        if row["review_state"] == "passed" and row["dev_state"] != "done":
-            raise WorklineCsvError(f"{task_id}: review_state=passed requires dev_state=done")
-        if row["dev_state"] == "done" and row["review_state"] in {"failed", "blocked"}:
+        if row["verify_state"] == "passed" and row["dev_state"] != "done":
+            raise WorklineCsvError(f"{task_id}: verify_state=passed requires dev_state=done")
+        if row["dev_state"] == "done" and row["verify_state"] in {"failed", "blocked"}:
             raise WorklineCsvError(
-                f"{task_id}: dev_state=done conflicts with review_state={row['review_state']}"
+                f"{task_id}: dev_state=done conflicts with verify_state={row['verify_state']}"
             )
 
     if ids[-1] != "REVIEW":
@@ -181,7 +181,7 @@ def require_note_for_exception(row: dict[str, str], updates: dict[str, str]) -> 
     effective_notes = updates.get("notes", row["notes"])
     exception_values = {
         updates.get("dev_state", row["dev_state"]),
-        updates.get("review_state", row["review_state"]),
+        updates.get("verify_state", row["verify_state"]),
         updates.get("git_state", row["git_state"]),
     }
     if exception_values & {"blocked", "skipped", "failed"} and not effective_notes.strip():
@@ -191,7 +191,7 @@ def require_note_for_exception(row: dict[str, str], updates: dict[str, str]) -> 
 def validate_transition(row: dict[str, str], updates: dict[str, str]) -> None:
     for key, allowed in {
         "dev_state": DEV_STATES,
-        "review_state": REVIEW_STATES,
+        "verify_state": VERIFY_STATES,
         "git_state": GIT_STATES,
     }.items():
         if key in updates and updates[key] not in allowed:
@@ -199,14 +199,14 @@ def validate_transition(row: dict[str, str], updates: dict[str, str]) -> None:
 
     old_dev = row["dev_state"]
     new_dev = updates.get("dev_state", old_dev)
-    new_review = updates.get("review_state", row["review_state"])
+    new_verify = updates.get("verify_state", row["verify_state"])
 
     if old_dev == "todo" and new_dev == "done":
         raise WorklineCsvError("cannot change dev_state directly from todo to done; set doing first")
-    if new_review == "passed" and new_dev != "done":
-        raise WorklineCsvError("review_state=passed requires dev_state=done")
-    if new_dev == "done" and new_review in {"failed", "blocked"}:
-        raise WorklineCsvError(f"dev_state=done conflicts with review_state={new_review}")
+    if new_verify == "passed" and new_dev != "done":
+        raise WorklineCsvError("verify_state=passed requires dev_state=done")
+    if new_dev == "done" and new_verify in {"failed", "blocked"}:
+        raise WorklineCsvError(f"dev_state=done conflicts with verify_state={new_verify}")
     require_note_for_exception(row, updates)
 
 
@@ -222,7 +222,7 @@ def command_set(args: argparse.Namespace) -> int:
     row = find_row(rows, args.task_id)
 
     updates: dict[str, str] = {}
-    for key in ("dev_state", "review_state", "git_state", "refs", "notes"):
+    for key in ("dev_state", "verify_state", "git_state", "refs", "notes"):
         value = getattr(args, key)
         if value is not None:
             updates[key] = value
@@ -285,7 +285,7 @@ def evidence_levels(row: dict[str, str]) -> set[str]:
 
 def build_summary(rows: list[dict[str, str]]) -> dict[str, object]:
     non_review = [row for row in rows if row["id"] != "REVIEW"]
-    review = find_row(rows, "REVIEW")
+    final_review = find_row(rows, "REVIEW")
     warnings: list[dict[str, str]] = []
     evidence_level_counts = {level: 0 for level in DEFAULT_EVIDENCE_LEVELS}
     tasks_with_evidence_refs = 0
@@ -347,7 +347,7 @@ def build_summary(rows: list[dict[str, str]]) -> dict[str, object]:
             )
         if (
             row["dev_state"] in {"blocked", "skipped"}
-            or row["review_state"] in {"failed", "blocked", "skipped"}
+            or row["verify_state"] in {"failed", "blocked", "skipped"}
             or row["git_state"] in {"blocked", "skipped"}
         ):
             warnings.append(
@@ -374,22 +374,22 @@ def build_summary(rows: list[dict[str, str]]) -> dict[str, object]:
             "ids": [row["id"] for row in non_review if row["dev_state"] == "blocked"],
         },
         "failed": {
-            "count": sum(1 for row in non_review if row["review_state"] == "failed"),
-            "ids": [row["id"] for row in non_review if row["review_state"] == "failed"],
+            "count": sum(1 for row in non_review if row["verify_state"] == "failed"),
+            "ids": [row["id"] for row in non_review if row["verify_state"] == "failed"],
         },
         "skipped": {
             "count": sum(
                 1
                 for row in non_review
                 if row["dev_state"] == "skipped"
-                or row["review_state"] == "skipped"
+                or row["verify_state"] == "skipped"
                 or row["git_state"] == "skipped"
             ),
             "ids": [
                 row["id"]
                 for row in non_review
                 if row["dev_state"] == "skipped"
-                or row["review_state"] == "skipped"
+                or row["verify_state"] == "skipped"
                 or row["git_state"] == "skipped"
             ],
         },
@@ -397,10 +397,10 @@ def build_summary(rows: list[dict[str, str]]) -> dict[str, object]:
             "count": sum(1 for row in non_review if row["git_state"] == "pending"),
             "ids": [row["id"] for row in non_review if row["git_state"] == "pending"],
         },
-        "review": {
-            "dev_state": review["dev_state"],
-            "review_state": review["review_state"],
-            "git_state": review["git_state"],
+        "final_review": {
+            "dev_state": final_review["dev_state"],
+            "verify_state": final_review["verify_state"],
+            "git_state": final_review["git_state"],
         },
         "evidence_refs": {
             "count": tasks_with_evidence_refs,
@@ -418,7 +418,7 @@ def format_summary(summary: dict[str, object]) -> str:
     failed = summary["failed"]
     skipped = summary["skipped"]
     git_pending = summary["git_pending"]
-    review = summary["review"]
+    final_review = summary["final_review"]
     evidence_refs = summary["evidence_refs"]
     evidence_levels = summary["evidence_levels"]
     warnings = summary["warnings"]
@@ -434,7 +434,7 @@ def format_summary(summary: dict[str, object]) -> str:
         f"failed: {failed['count']}",
         f"skipped: {skipped['count']}",
         f"git_pending: {git_pending['count']}",
-        f"review: {review['dev_state']}/{review['review_state']}/{review['git_state']}",
+        f"final_review: {final_review['dev_state']}/{final_review['verify_state']}/{final_review['git_state']}",
         f"evidence_refs: {evidence_refs['count']}/{evidence_refs['total']} non-review tasks",
         f"evidence_levels: {level_text}",
         f"warnings: {len(warnings)}",
@@ -468,7 +468,7 @@ def build_parser() -> argparse.ArgumentParser:
     set_parser.add_argument("csv_path")
     set_parser.add_argument("task_id")
     set_parser.add_argument("--dev_state")
-    set_parser.add_argument("--review_state")
+    set_parser.add_argument("--verify_state")
     set_parser.add_argument("--git_state")
     set_parser.add_argument("--refs")
     set_parser.add_argument("--append-refs")
@@ -499,3 +499,7 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+
+

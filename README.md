@@ -79,7 +79,7 @@ evidence/T012-board-check/
 
 `tasks.csv` 的 `refs` 字段可以同时引用 `prd.md`、`references/...` 和 `evidence/...`。
 
-执行证据应使用轻量标签标明证据等级。标签写在 `refs`、`notes` 或 `run.md` 中，不新增 CSV 字段，也不生成新的状态文件。推荐标签：
+执行证据应使用轻量标签标明证据等级。为了让 `summary` 可以稳定检查，机读证据路径和证据标签必须写入 `tasks.csv` 的 `refs` 或 `notes`；`run.md` 只负责展开说明过程、命令输出和判断依据。推荐标签：
 
 | 标签 | 含义 |
 | --- | --- |
@@ -98,7 +98,7 @@ evidence/T012-board-check/
 `tasks.csv` 是执行阶段的唯一任务计划和状态源，固定表头为：
 
 ```csv
-id,depends_on,mode,title,description,acceptance_criteria,verification,dev_state,review_state,git_state,refs,notes
+id,depends_on,mode,title,description,acceptance_criteria,verification,dev_state,verify_state,git_state,refs,notes
 ```
 
 状态枚举：
@@ -106,19 +106,29 @@ id,depends_on,mode,title,description,acceptance_criteria,verification,dev_state,
 | 字段 | 允许值 |
 | --- | --- |
 | `dev_state` | `todo`、`doing`、`done`、`blocked`、`skipped` |
-| `review_state` | `pending`、`passed`、`failed`、`blocked`、`skipped` |
+| `verify_state` | `pending`、`passed`、`failed`、`blocked`、`skipped` |
 | `git_state` | `pending`、`committed`、`not_needed`、`blocked`、`skipped` |
 
-任务闭环条件是：
+正常任务闭环条件是：
 
 ```text
 dev_state = done
-review_state = passed
+verify_state = passed
 ```
+
+`skipped` 是例外收口：只有用户确认或 PRD 明确允许时才可使用，且必须在 `notes` 和 `run.md` 中说明依据。`skipped` 可以满足后续依赖，但不等同于已完成。
 
 `git_state` 不参与任务依赖满足判断，但归档前必须说明每条任务的最终提交状态。
 
 `REVIEW` 行必须是最后一行，且依赖所有非 `REVIEW` 任务。它检查 PRD 覆盖、CSV 状态、验证记录、`run.md` 证据、失败/跳过解释和提交状态结论，不能补做实现任务。
+
+三类检查的职责边界固定如下：
+
+| 检查点 | 时间 | 结论载体 | 职责 |
+| --- | --- | --- | --- |
+| `$workline-review` | PRD 后、执行前 | `reviews/*.md` | 阶段门禁，只判断是否能进入下一阶段 |
+| `REVIEW` 行 | `/goal` 执行末尾 | `tasks.csv` + `run.md` | 最终审计，只检查执行闭环，不补做实现 |
+| `$workline-archive` | 归档前 | 归档输出 | 搬运前核对，只确认闭环条件满足并移动目录 |
 
 ## 复盘摘要
 
@@ -131,7 +141,7 @@ python workline-run/scripts/workline_csv.py summary .workline/active/<slug>/task
 
 默认输出给人阅读，`--json` 输出机器可读结果，方便 `$workline-review` 和 `$workline-archive` 复用。
 
-`summary` 的 warnings 是提醒型体检结果，不让命令因为 warning 失败。真正是否 `PASS`、`REVISE`、`BLOCKED`，仍由 `$workline-review` 和 `$workline-archive` 根据 PRD、`tasks.csv`、`run.md`、`reviews/` 和证据上下文判断。
+`summary` 的 warnings 是提醒型体检结果，不让命令因为 warning 失败。它只读取 `tasks.csv`，因此证据路径和 `[evidence:*]` 标签必须在 `refs` 或 `notes` 中出现。真正是否 `PASS`、`REVISE`、`BLOCKED`，仍由 `$workline-review` 和 `$workline-archive` 根据 PRD、`tasks.csv`、`run.md`、`reviews/` 和证据上下文判断。
 
 当前 warning 类型：
 
@@ -156,7 +166,7 @@ python workline-run/scripts/workline_csv.py summary .workline/active/<slug>/task
 | `workline-tasks/scripts/workline_csv.py` | `workline-tasks` | 任务拆分后校验 CSV |
 | `workline-run/scripts/workline_csv.py` | `workline-run` | 执行阶段校验、更新 CSV、定位下一任务、生成复盘摘要 |
 
-两份 `workline_csv.py` 必须保持实现一致。修改其中一份时，直接同步另一份并分别运行校验。
+两份 `workline_csv.py` 必须保持实现一致。修改其中一份时，直接同步另一份，并用文件哈希或 diff 确认一致后再分别运行校验。
 
 ## 推荐步骤
 
@@ -181,3 +191,4 @@ python workline-run/scripts/workline_csv.py summary .workline/active/<slug>/task
 人工审查意见也可以保存到 `reviews/`，再由 `$workline-review` 汇总判断。
 
 Workline 不混用其它规划工作流。若项目已有测试、构建或提交规范，执行阶段继续遵守项目自身规范。
+

@@ -35,11 +35,11 @@ description: "根据 Workline PRD 生成或修订可执行 tasks.csv。Use when 
   - `acceptance_criteria`
   - `verification`
   - `dev_state`
-  - `review_state`
+  - `verify_state`
   - `git_state`
   - `refs`
   - `notes`
-- 默认状态为 `dev_state=todo`、`review_state=pending`、`git_state=pending`。
+- 默认状态为 `dev_state=todo`、`verify_state=pending`、`git_state=pending`。
 - `mode=AFK` 表示可自动执行；`mode=HITL` 表示需要人工输入、实机操作、账号权限或关键确认。
 - `refs` 引用 PRD 章节、`references/...` 输入材料或后续 `evidence/...` 运行证据路径。
 - 最后一行必须是 `REVIEW`，并依赖所有非 `REVIEW` 任务。
@@ -49,8 +49,10 @@ description: "根据 Workline PRD 生成或修订可执行 tasks.csv。Use when 
 使用 `templates/tasks.csv` 的固定表头：
 
 ```csv
-id,depends_on,mode,title,description,acceptance_criteria,verification,dev_state,review_state,git_state,refs,notes
+id,depends_on,mode,title,description,acceptance_criteria,verification,dev_state,verify_state,git_state,refs,notes
 ```
+
+这是唯一合法表头；不要生成旧字段 `review_state`。
 
 写 CSV 时使用标准 CSV 转义；字段里有逗号、换行或引号时必须正确引用。
 
@@ -86,3 +88,4 @@ python workline-tasks/scripts/workline_csv.py validate .workline/active/<slug>/t
 - 任务数量和 `REVIEW` 依赖范围。
 - CSV 校验命令和结果。
 - 下一步先使用 `$workline-review` 审查 `tasks.csv`；审查通过后再使用 `/goal 根据 $workline-run 规范 执行 <tasks.csv>`。
+

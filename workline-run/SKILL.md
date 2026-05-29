@@ -19,7 +19,7 @@ description: "Workline 的 /goal 长任务执行规则包。Use when the user in
 
 ## 执行前检查
 
-1. 定位活动目录、`prd.md`、`tasks.csv`、`references/` 和 `evidence/`；如果旧活动目录缺少 `evidence/`，先创建。
+1. 定位活动目录、`prd.md`、`tasks.csv`、`references/` 和 `evidence/`；如果缺少 `evidence/`，先创建。
 2. 运行：
 
 ```bash
@@ -47,14 +47,15 @@ python workline-run/scripts/workline_csv.py set <tasks.csv> T001 --dev_state doi
 4. 按 PRD 和任务验收标准真实实现。
 5. 运行任务要求的验证命令或人工检查，并记录真实输出摘要。
 6. 将实现、验证命令、真实输出摘要、失败原因、阻塞项、运行产物路径和证据等级追加到 `run.md`。
-7. 验证通过后更新：
+7. 验证通过后更新 `dev_state` 和 `verify_state`；`git_state` 必须按真实提交需求选择，不默认写成无需提交：
 
 ```bash
-python workline-run/scripts/workline_csv.py set <tasks.csv> T001 --dev_state done --review_state passed --git_state not_needed --append-notes "verified"
+python workline-run/scripts/workline_csv.py set <tasks.csv> T001 --dev_state done --verify_state passed --git_state pending --append-notes "verified"
 ```
 
+   如果任务确实无需提交，才把 `git_state` 更新为 `not_needed`；如果已经提交，更新为 `committed`。
 8. 如果任务产生 build log、截图、验证结果、配置快照、部署包或其它执行产物，把文件放入 `evidence/<task-id>-<name>/`，并通过 `--append-refs` 关联。`references/` 只放 PRD / grill 输入材料，不放执行证据。
-9. 追加证据引用时同时写入轻量证据标签，例如 `[evidence:local-test]`、`[evidence:mock-mqtt]`、`[evidence:board-smoke]`、`[evidence:real-device]`、`[evidence:manual-review]`；不要新增 CSV 字段。
+9. 追加证据引用时，必须同时把轻量证据标签写入 `refs` 或 `notes`，例如 `[evidence:local-test]`、`[evidence:mock-mqtt]`、`[evidence:board-smoke]`、`[evidence:real-device]`、`[evidence:manual-review]`；不要新增 CSV 字段。`run.md` 可以重复说明证据等级，但不能作为 `summary` 的机读输入。
 
 多轮实机验证或多次尝试时，在同一个任务证据目录下按尝试分组，例如：
 
@@ -75,13 +76,13 @@ evidence/T012-board-check/
 | `[evidence:real-device]` | 真实设备、真实通信服务、真实 ACK 或现场链路验证 |
 | `[evidence:manual-review]` | 人工检查、截图复核、HITL 操作确认 |
 
-如果只有 `[evidence:board-smoke]` 而没有 `[evidence:real-device]`，`run.md` 和最终 REVIEW 必须明确说明“未覆盖真实设备/真实 ACK”，避免把模拟烟测扩大表述为真实联调完成。
+如果只有 `[evidence:board-smoke]` 而没有 `[evidence:real-device]`，`notes`、`run.md` 和最终 REVIEW 必须明确说明“未覆盖真实设备/真实 ACK”，避免把模拟烟测扩大表述为真实联调完成。
 
 ## 失败与阻塞
 
 - 验证失败或初步检查失败时，不得把 `dev_state` 标为 `done`。
 - 如果可以继续修复，保持或更新为 `doing`，并在 `run.md` 记录失败证据。
-- 如果当前条件不足导致无法继续，更新为 `blocked`，同时把 `review_state` 更新为 `failed` 或 `blocked`，并写明原因。
+- 如果当前条件不足导致无法继续，更新为 `blocked`，同时把 `verify_state` 更新为 `failed` 或 `blocked`，并写明原因。
 - `skipped` 只能来自用户确认或 PRD 明确允许；必须在 `notes` 和 `run.md` 记录依据。
 - 不吞错、不删除测试、不绕过校验、不降低验收标准。
 - 发现任务定义有缺陷时，记录缺陷并请求确认；不要擅自扩大范围。
@@ -94,7 +95,7 @@ REVIEW 需要检查：
 
 - PRD 功能要求和验收标准是否都有任务覆盖。
 - `tasks.csv` 状态是否一致。
-- 每条任务是否有验证记录和 `run.md` 证据。
+- 每条任务是否有验证记录、`run.md` 证据说明，以及 `refs` 或 `notes` 中的机读证据路径和标签。
 - `summary` warnings 是否已解释，尤其是证据标签缺失、HITL 证据不足和 `board-smoke` 未覆盖真实设备。
 - 失败、阻塞、跳过是否有解释。
 - `git_state` 是否已有归档前结论。
@@ -117,5 +118,7 @@ python workline-run/scripts/workline_csv.py summary <tasks.csv>
 
 - 不重新解释目标、功能要求或验收标准。
 - 不把 `run.md` 或聊天记录当作任务状态源。
+- 不把仅写在 `run.md` 的证据标签当作已通过 `summary` 检查。
 - 不手工编辑状态字段；状态变化必须通过 `workline_csv.py set`。
 - 不用假数据、空跑、只读代码或“看起来可以”冒充通过。
+
