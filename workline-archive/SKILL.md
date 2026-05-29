@@ -7,9 +7,9 @@ description: "归档已完成的 Workline 活动目录。Use when the user provi
 
 ## 目标
 
-在不补做任务、不伪造日志的前提下，检查 Workline 过程文件是否闭环，将活动目录从 `.workline/active/<slug>/` 移动到 `.workline/archive/<slug>/`，并在归档后只提交核心过程文件。
+检查 Workline 过程文件是否闭环，将活动目录从 `.workline/active/<slug>/` 移动到 `.workline/archive/<slug>/`，并在归档后提交核心过程文件。
 
-用户必须提供活动目录路径；不要猜测当前 active 任务。
+用户必须提供活动目录路径。
 
 ## 归档前检查
 
@@ -52,14 +52,14 @@ python workline-run/scripts/workline_csv.py summary .workline/active/<slug>/task
 
 如果存在 `reviews/`，检查：
 
-- 如果存在 `prd-review-*.md` 或 `tasks-review-*.md`，最新阶段结论不能是未解释的 `REVISE` 或 `BLOCKED`。
+- 如果存在 `prd-review-*.md` 或 `tasks-review-*.md`，最新阶段结论应为 `PASS`，或已有明确处理说明。
 - 如果用户明确跳过审查，`run.md` 或归档输出中必须说明跳过原因。
 
 ## 移动目录
 
 1. 计算目标路径 `.workline/archive/<slug>/`。
-2. 如果目标路径已存在，停止；不要覆盖。
-3. 使用移动操作移动活动目录；不要复制 `references/` 或 `evidence/` 下软链接、Junction 指向的外部内容。
+2. 如果目标路径已存在，停止并报告。
+3. 使用移动操作移动活动目录，保留 `references/` 或 `evidence/` 下链接本体。
 4. 移动后确认 active 路径不存在、archive 路径存在。
 
 PowerShell 示例：
@@ -77,7 +77,7 @@ Move-Item -LiteralPath ".workline\active\<slug>" -Destination ".workline\archive
 - `.workline/archive/<slug>/tasks.csv`
 - `.workline/archive/<slug>/run.md`
 
-不要提交 `references/`、`evidence/`、`reviews/` 或其它过程材料。不要使用 `git add .`。
+提交命令使用显式路径。
 
 推荐命令形态：
 
@@ -90,10 +90,10 @@ git commit -m "workline: archive <slug>"
 
 ## 硬约束
 
-- 不伪造日志。
-- 不覆盖已有归档目录。
+- 日志以已有真实记录为准。
+- 归档目标必须是新目录。
 - 如果闭环条件不满足，停止并列出具体缺口。
-- 不提交 `references/`、`evidence/`、`reviews/`。
+- 归档提交范围限于核心过程文件。
 
 ## 输出
 

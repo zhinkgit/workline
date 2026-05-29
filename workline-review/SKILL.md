@@ -1,6 +1,6 @@
 ---
 name: workline-review
-description: "审查 Workline 阶段产物并形成阶段门禁结论。Use when the user provides a Workline active directory, prd.md, tasks.csv, reviews folder, or review notes and wants to review PRD completeness, task split quality, blocking issues, stage readiness, or whether to proceed from grill to tasks or from tasks to run. Do not implement code or silently rewrite requirements."
+description: "审查 Workline 阶段产物并形成阶段门禁结论。Use when the user provides a Workline active directory, prd.md, tasks.csv, reviews folder, or review notes and wants to review PRD completeness, task split quality, blocking issues, stage readiness, or whether to proceed from grill to tasks or from tasks to run."
 ---
 
 # Workline Review
@@ -9,7 +9,7 @@ description: "审查 Workline 阶段产物并形成阶段门禁结论。Use when
 
 按用户主动要求审查 Workline 活动目录中的阶段产物，重点检查 `prd.md` 和 `tasks.csv` 是否足以进入下一阶段，并把结论沉淀到按需创建的 `reviews/`。
 
-本 Skill 是可选阶段门禁，不替代 `$workline-grill`、`$workline-tasks` 或 `$workline-run`：
+本 Skill 是可选阶段门禁：
 
 - PRD 有问题时，回到 `$workline-grill` 修订。
 - `tasks.csv` 有问题时，回到 `$workline-tasks` 修订。
@@ -17,7 +17,7 @@ description: "审查 Workline 阶段产物并形成阶段门禁结论。Use when
 
 ## 入口检查
 
-用户必须提供活动目录、`prd.md` 或 `tasks.csv` 路径；不要猜测当前 active 任务。
+用户必须提供活动目录、`prd.md` 或 `tasks.csv` 路径。
 
 定位活动目录后确认：
 
@@ -25,7 +25,7 @@ description: "审查 Workline 阶段产物并形成阶段门禁结论。Use when
 - `references/` 存在。
 - 审查 PRD 时，`prd.md` 存在。
 - 审查任务时，`prd.md` 和 `tasks.csv` 都存在。
-- `reviews/` 不存在时创建；不要覆盖已有审查记录。
+- `reviews/` 不存在时创建；已有审查记录保留。
 
 ## 审查目标选择
 
@@ -35,12 +35,6 @@ description: "审查 Workline 阶段产物并形成阶段门禁结论。Use when
 | --- | --- | --- |
 | `prd` | `prd.md` 生成后、进入 `$workline-tasks` 前、或用户要求审查需求 | `reviews/prd-review-YYYY-MM-DD-HHMM.md` |
 | `tasks` | `tasks.csv` 生成后、进入 `/goal` 前、或用户要求审查任务拆分 | `reviews/tasks-review-YYYY-MM-DD-HHMM.md` |
-
-如果用户没有明确目标：
-
-- 只有 `prd.md` 没有 `tasks.csv` 时，审查 `prd`。
-- 已有 `tasks.csv` 时，审查 `tasks`。
-- 用户粘贴或引用审查意见时，按被审查对象归入 `prd` 或 `tasks`；无法判断时先要求用户说明。
 
 ## PRD 审查
 
@@ -64,7 +58,7 @@ description: "审查 Workline 阶段产物并形成阶段门禁结论。Use when
 
 - `PASS`：可进入 `$workline-tasks`。
 - `REVISE`：需要回到 `$workline-grill` 修订，但不需要重新初始化。
-- `BLOCKED`：缺少关键材料或关键决策，不能继续拆任务。
+- `BLOCKED`：缺少关键材料或关键决策，任务拆分暂缓。
 
 ## Tasks 审查
 
@@ -81,13 +75,13 @@ description: "审查 Workline 阶段产物并形成阶段门禁结论。Use when
 python workline-tasks/scripts/workline_csv.py validate .workline/active/<slug>/tasks.csv
 ```
 
-如果需要快速了解任务状态分布，可以额外运行：
+如果需要快速查看 `tasks.csv` 中是否已有非初始状态，可以额外运行：
 
 ```bash
 python workline-tasks/scripts/workline_csv.py summary .workline/active/<slug>/tasks.csv
 ```
 
-`summary` 只是可选状态快照，不自动决定阶段结论。审查者需要结合 PRD、`run.md` 和上下文判断是否存在阻塞问题、需要修订的问题或可选建议。
+`summary` 只是可选状态快照，不自动决定阶段结论。Tasks 审查主要结合 PRD 和 `tasks.csv` 判断是否存在阻塞问题、需要修订的问题或可选建议。
 
 检查：
 
@@ -98,16 +92,15 @@ python workline-tasks/scripts/workline_csv.py summary .workline/active/<slug>/ta
 - 是否把 PRD 中未闭环的待确认问题伪装成可执行任务。
 - `mode=AFK/HITL` 是否合理，人工输入、实机操作、账号权限是否被标为 HITL。
 - `REVIEW` 行是否最后一行，并依赖所有非 `REVIEW` 任务。
-- `verification` 是否是真实可执行的验证命令或人工检查，不是空泛描述。
-- 已执行任务是否在 `run.md` 或 `notes` 中记录验证命令、人工检查动作和真实输出摘要；如果产生了过程物，还应引用 `evidence/...` 路径。
-- `mode=HITL` 的任务是否说明人工输入、实机操作、账号权限或关键确认的完成情况；如果未覆盖真实设备、真实服务或真实 ACK，是否明确说明。
-- `git_state=pending/blocked`、`skipped`、`blocked`、`failed` 是否已有解释或需要修订；其中 `git_state=blocked` 表示验证已通过但自动提交未闭环，不应反向否定任务验证结论。
+- `verification` 是否是真实可执行的验证命令或人工检查。
+- `notes` 是否只记录任务定义阶段需要说明的短备注，不预填执行结论。
+- 任务是否保持执行前初始状态；若已有非初始状态，需要确认用户是在审查历史任务表还是准备重新执行。
 
 结论：
 
 - `PASS`：可进入 `/goal 根据 $workline-run 规范 执行 ...`。
 - `REVISE`：需要回到 `$workline-tasks` 修订 `tasks.csv`。
-- `BLOCKED`：PRD 或任务定义存在阻塞问题，不能执行。
+- `BLOCKED`：PRD 或任务定义存在阻塞问题，执行暂缓。
 
 ## 已有审查意见处理
 
@@ -146,26 +139,23 @@ python workline-tasks/scripts/workline_csv.py summary .workline/active/<slug>/ta
 
 ## 覆盖检查
 
-## Summary Warnings
+## 状态快照
 
 - 命令：
-- warning 数量：
-- 采纳为阻塞：
-- 采纳为需修订：
-- 采纳为可选建议：
-- 已解释或不采纳：
+- 是否运行：
+- 发现的非初始状态：
+- 处理结论：
 
 ## 建议下一步
 ```
 
 ## 硬约束
 
-- 不实现代码。
-- 不把审查报告当作新的需求源；`prd.md` 仍是任务拆分的需求源。
-- 不降低 `prd.md` 的验收标准。
-- 不把缺少验证记录的判断写成已确认事实。
-- 不覆盖已有 review 文件；同一分钟重名时追加短后缀。
-- 不把完整聊天流水写入审查报告，只保留关键问题、判断和建议。
+- 审查只形成阶段结论和修订建议。
+- `prd.md` 仍是任务拆分的需求源。
+- `prd.md` 的验收标准保持原样。
+- 已有 review 文件保留；同一分钟重名时追加短后缀。
+- 审查报告只保留关键问题、判断和建议。
 
 ## 输出
 

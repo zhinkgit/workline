@@ -1,6 +1,6 @@
 ---
 name: workline-init
-description: "初始化 Workline 长任务过程目录。Use when the user wants to start a new lightweight long-task workflow from a rough requirement, create a timestamped directory under .workline/active, create brief.md and references, or prepare materials before PRD grilling. Do not use for PRD writing, task splitting, execution, or archive."
+description: "初始化 Workline 长任务过程目录。Use when the user wants to start a new lightweight long-task workflow from a rough requirement, create a timestamped directory under .workline/active, create brief.md and references, or prepare materials before PRD grilling."
 ---
 
 # Workline Init
@@ -35,7 +35,7 @@ python workline-init/scripts/init_workline.py --root . --slug bulk-import --brie
 
 ## 硬约束
 
-- 不覆盖已有活动目录；如果目标目录已存在，停止并报告。
+- 目标目录已存在时停止并报告。
 
 ## 输出
 

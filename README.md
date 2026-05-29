@@ -36,14 +36,14 @@ workline/
 
 ## 六个 Skill
 
-| Skill | 职责 | 不做什么 |
+| Skill | 职责 | 交接点 |
 | --- | --- | --- |
-| `workline-init` | 创建 `.workline/active/<timestamp-slug>/`、`brief.md` 和 `references/` | 不追问、不写 PRD、不拆任务、不审查、不执行代码 |
-| `workline-grill` | 读取 `brief.md` 和 `references/`，逐问逐答澄清需求并生成 `prd.md` | 不生成 `tasks.csv`，不执行代码 |
-| `workline-review` | 可选审查 `prd.md` 或 `tasks.csv`，把阶段结论写入按需创建的 `reviews/` | 不实现代码，不把审查报告当作新需求源，不替代修订阶段 |
-| `workline-tasks` | 只根据 `prd.md` 拆分任务，生成并校验 `tasks.csv` | 不实现代码，不把未确认问题伪装成任务 |
-| `workline-run` | 作为 `/goal` 执行规则包，约束任务选择、状态更新、日志和 REVIEW | 不重新实现调度器，不替代 `/goal` |
-| `workline-archive` | 检查过程文件闭环后，将活动目录移动到 archive | 不补做任务，不伪造日志，不覆盖归档目录 |
+| `workline-init` | 创建 `.workline/active/<timestamp-slug>/`、`brief.md` 和 `references/` | 交给 `$workline-grill` 澄清需求 |
+| `workline-grill` | 读取 `brief.md` 和 `references/`，逐问逐答澄清需求并生成 `prd.md` | 交给 `$workline-tasks` 拆分任务 |
+| `workline-review` | 可选审查 `prd.md` 或 `tasks.csv`，把阶段结论写入按需创建的 `reviews/` | 结论为 `PASS` / `REVISE` / `BLOCKED` |
+| `workline-tasks` | 根据 `prd.md` 拆分任务，生成并校验 `tasks.csv` | 交给 `/goal` + `$workline-run` 执行 |
+| `workline-run` | 作为 `/goal` 执行规则包，约束任务选择、状态更新、日志和 REVIEW | 产出已更新的 `tasks.csv` 和 `run.md` |
+| `workline-archive` | 检查过程文件闭环后，将活动目录移动到 archive | 归档核心过程文件 |
 
 ## 项目内目录
 
@@ -62,9 +62,9 @@ workline/
 
 活动目录命名为 `YYYY-MM-DD-HHMM-brief-slug`。
 
-`references/` 默认保持浅层结构，只放进入 PRD / grill 阶段所需的输入材料，例如参考仓库软链接、旧实现、网页资料、协议文档和用户文件。它不再承载执行阶段产生的日志、截图、部署包或烟测记录。
+`references/` 默认保持浅层结构，用于 PRD / grill 阶段输入材料，例如参考仓库软链接、旧实现、网页资料、协议文档和用户文件。
 
-`evidence/` 不是默认目录。只有 `$workline-run` 在执行阶段产生需要保留的过程物时才创建它，例如测试日志、构建日志、截图、配置快照、部署包、板端烟测记录。普通任务使用 `evidence/T003-config-manager/` 这类任务编号目录；多轮实机验证或多次尝试时，在任务目录下继续按尝试分组，例如：
+`evidence/` 是执行阶段的可选过程物目录，用于保存测试日志、构建日志、截图、配置快照、部署包、板端烟测记录。普通任务使用 `evidence/T003-config-manager/` 这类任务编号目录；多轮实机验证或多次尝试时，在任务目录下继续按尝试分组，例如：
 
 ```text
 evidence/T012-board-check/
@@ -75,7 +75,7 @@ evidence/T012-board-check/
 
 `tasks.csv` 的 `refs` 字段可以同时引用 `prd.md`、`references/...` 和 `evidence/...`。验证命令、人工检查动作、真实输出摘要和未覆盖范围写入 `run.md`，必要的短备注写入 `notes`。如果存在过程物路径，也写入 `refs`、`notes` 或 `run.md`。
 
-`reviews/` 也不是默认目录。只有用户主动调用 `$workline-review`，或要求保存人工/其它 AI 审查意见时才创建。审查报告不是新的需求源；它只指出 `prd.md` 或 `tasks.csv` 是否需要回到上一个阶段修订。
+`reviews/` 用于保存 `$workline-review`、人工审查或其它 AI 审查意见。审查报告提供阶段质量反馈，需求源仍是 `prd.md`。
 
 ## CSV 状态源
 
@@ -123,38 +123,38 @@ verify_state = passed
 
 - 没有业务改动需要提交：`git_state=done`。
 - 已成功提交任务相关业务改动：`git_state=done`，提交哈希写入 `notes` 或 `run.md`。
-- 工作区混有不相关改动、改动归属不清、提交失败或不是 Git 仓库：`git_state=blocked`，原因写入 `notes` 和 `run.md`。
+- 工作区混有不相关改动、改动归属不清、提交失败或当前目录无 Git 仓库：`git_state=blocked`，原因写入 `notes` 和 `run.md`。
 
 `git_state=blocked` 不改变 `dev_state=done` / `verify_state=passed` 的验证结论，也不阻止继续执行后续任务，但归档前必须处理完。
 
-`REVIEW` 行必须是最后一行，且依赖所有非 `REVIEW` 任务。它检查 PRD 覆盖、CSV 状态、验证记录、`run.md` 验证说明、失败/跳过解释和提交状态结论，不能补做实现任务。
+`REVIEW` 行必须是最后一行，且依赖所有非 `REVIEW` 任务。它检查 PRD 覆盖、CSV 状态、验证记录、`run.md` 验证说明、失败/跳过解释和提交状态结论。
 
 三类检查的职责边界固定如下：
 
 | 检查点 | 时间 | 结论载体 | 职责 |
 | --- | --- | --- | --- |
 | `$workline-review` | 用户主动要求复核时 | `reviews/*.md` | 可选阶段门禁，只判断是否能进入下一阶段 |
-| `REVIEW` 行 | `/goal` 执行末尾 | `tasks.csv` + `run.md` | 最终审计，只检查执行闭环，不补做实现 |
+| `REVIEW` 行 | `/goal` 执行末尾 | `tasks.csv` + `run.md` | 最终审计，检查执行闭环 |
 | `$workline-archive` | 归档前 | 归档输出 | 搬运前核对，只确认闭环条件满足并移动目录 |
 
 ## 状态快照
 
-`workline_csv.py summary` 是可选状态快照工具，用于快速查看 `tasks.csv` 的状态分布。它只读取 `tasks.csv`，不写入文件，不成为新的状态源，也不是阶段门禁。
+`workline_csv.py summary` 是可选状态快照工具，用于快速查看 `tasks.csv` 的状态分布。它只读取 `tasks.csv`，状态源仍然是原 CSV 文件。
 
 ```bash
 python workline-run/scripts/workline_csv.py summary .workline/active/<slug>/tasks.csv
 python workline-run/scripts/workline_csv.py summary .workline/active/<slug>/tasks.csv --json
 ```
 
-默认输出给人阅读，`--json` 输出机器可读结果。需要快速了解任务状态时可以运行它，但 `$workline-run`、`$workline-review` 和 `$workline-archive` 不应把它作为每阶段强制步骤。
+默认输出给人阅读，`--json` 输出机器可读结果。需要快速了解任务状态时运行它。
 
-`summary` 只读取 `tasks.csv`，因此不会判断验证质量；真正是否 `PASS`、`REVISE`、`BLOCKED`，仍由 `$workline-review` 或 `$workline-archive` 根据 PRD、`tasks.csv`、`run.md`、`reviews/` 和实际验证上下文判断。
+验证质量和阶段结论由 `$workline-review` 或 `$workline-archive` 根据 PRD、`tasks.csv`、`run.md`、`reviews/` 和实际验证上下文判断。
 
 当前 warning 类型：
 
 ## Git 提交
 
-任务级提交由 `$workline-run` 在每条任务验证通过后自动尝试，只提交当前任务相关的业务代码、测试、文档或配置文件。任务级提交不提交 `.workline/active/...`、`.workline/archive/...`、`references/`、`evidence/` 或其它 Workline 过程材料。
+任务级提交由 `$workline-run` 在每条任务验证通过后自动尝试，提交范围限于当前任务相关的业务代码、测试、文档或配置文件。
 
 Workline 过程文件由 `$workline-archive` 在移动到 `.workline/archive/<slug>/` 后统一提交，并且只提交以下四个文件：
 
@@ -163,7 +163,7 @@ Workline 过程文件由 `$workline-archive` 在移动到 `.workline/archive/<sl
 - `.workline/archive/<slug>/tasks.csv`
 - `.workline/archive/<slug>/run.md`
 
-不提交 `references/`、`evidence/`、`reviews/`。
+`references/`、`evidence/`、`reviews/` 作为过程材料保留在归档目录中。
 
 ## 模板和脚本
 
