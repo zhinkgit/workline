@@ -15,8 +15,6 @@ description: "初始化 Workline 长任务过程目录。Use when the user wants
 - 可选活动目录 slug。
 - 可选项目根目录；未提供时使用当前工作目录。
 
-如果用户没有给出粗略需求，可以创建带 TODO 的 `brief.md`，但要明确提醒用户补充。
-
 ## 步骤
 
 1. 定位项目根目录。
@@ -24,7 +22,7 @@ description: "初始化 Workline 长任务过程目录。Use when the user wants
 3. 确认新目录包含：
    - `brief.md`
    - `references/`
-4. 返回活动目录路径，并提示用户把参考资料、旧代码、协议文档或其它输入材料放入 `references/`。
+4. 返回活动目录路径，并提示用户手动填写 `brief.md`，把参考资料、旧代码、协议文档或其它输入材料放入 `references/`。
 
 示例：
 
@@ -42,6 +40,7 @@ python workline-init/scripts/init_workline.py --root . --slug bulk-import --brie
 用简短中文说明：
 
 - 新建活动目录路径。
-- `brief.md`，`references/` 已创建。已写入原始粗需求和补充材料提示。
-- 请手动完善 `brief.md`，`references/` 内容。
+- `brief.md` 已创建为基础模板，创建时间已填充。
+- `references/` 已创建为空目录。
+- 请按 `brief.md` 模板手动填写内容，并把参考资料放入 `references/`。
 - 下一步再使用 `$workline-grill`。

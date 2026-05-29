@@ -12,6 +12,7 @@ workline/
 ├── workline-init/
 │   ├── SKILL.md
 │   ├── agents/openai.yaml
+│   ├── templates/brief.md
 │   └── scripts/init_workline.py
 ├── workline-grill/
 │   ├── SKILL.md
@@ -39,7 +40,7 @@ workline/
 
 | Skill | 职责 | 交接点 |
 | --- | --- | --- |
-| `workline-init` | 创建 `.workline/active/<timestamp-slug>/`、`brief.md` 和 `references/` | 交给 `$workline-grill` 澄清需求 |
+| `workline-init` | 创建 `.workline/active/<timestamp-slug>/`、带基础模板的 `brief.md` 和空的 `references/` | 交给 `$workline-grill` 澄清需求 |
 | `workline-grill` | 读取 `brief.md` 和 `references/`，逐问逐答澄清需求并生成 `prd.md` | 交给 `$workline-tasks` 拆分任务 |
 | `workline-review` | 可选审查 `prd.md` 或 `tasks.csv`，把阶段结论写入按需创建的 `reviews/` | 结论为 `PASS` / `REVISE` / `BLOCKED` |
 | `workline-tasks` | 根据 `prd.md` 拆分任务，生成并校验 `tasks.csv` | 交给 `/goal` + `$workline-run` 执行 |
@@ -63,7 +64,7 @@ workline/
 
 活动目录命名为 `YYYY-MM-DD-HHMM-brief-slug`。
 
-`references/` 默认保持浅层结构，用于 PRD / grill 阶段输入材料，例如参考仓库软链接、旧实现、网页资料、协议文档和用户文件。
+`brief.md` 由 `$workline-init` 基于 `workline-init/templates/brief.md` 创建，模板文件是文档结构的真相源；脚本只填充运行时占位符，例如创建时间。模板中的用户内容主要由用户手动填写。`references/` 默认创建为空目录并保持浅层结构，用于 PRD / grill 阶段输入材料，例如参考仓库软链接、旧实现、网页资料、协议文档和用户文件。
 
 `evidence/` 是执行阶段的可选过程物目录，用于保存测试日志、构建日志、截图、配置快照、部署包、板端烟测记录。普通任务使用 `evidence/T003-config-manager/` 这类任务编号目录；多轮实机验证或多次尝试时，在任务目录下继续按尝试分组，例如：
 
@@ -170,6 +171,7 @@ Workline 过程文件由 `$workline-archive` 在移动到 `.workline/archive/<sl
 
 | 文件 | 归属 | 用途 |
 | --- | --- | --- |
+| `workline-init/templates/brief.md` | `workline-init` | 生成 `brief.md` |
 | `workline-grill/templates/prd.md` | `workline-grill` | 生成 `prd.md` |
 | `workline-tasks/templates/tasks.csv` | `workline-tasks` | 生成 `tasks.csv` |
 | `workline-init/scripts/init_workline.py` | `workline-init` | 初始化活动目录 |
@@ -180,7 +182,7 @@ Workline 过程文件由 `$workline-archive` 在移动到 `.workline/archive/<sl
 
 ## 推荐步骤
 
-1. 使用 `$workline-init` 创建活动目录，并把参考资料放进 `references/`。
+1. 使用 `$workline-init` 创建活动目录，手动填写 `brief.md`，并把参考资料放进 `references/`。
 2. 使用 `$workline-grill` 读取活动目录，逐问逐答生成 `prd.md`。
 3. 使用 `$workline-tasks` 只根据 `prd.md` 生成 `tasks.csv`，并运行 CSV 校验。
 4. 使用 `/goal 根据 $workline-run 规范 执行 .workline/active/<slug>/tasks.csv` 进入实现阶段。

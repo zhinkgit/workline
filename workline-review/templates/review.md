@@ -1,10 +1,9 @@
-# Workline Review
+# Review: <标题>
 
 ## 基本信息
 
 - 审查目标：
 - 审查时间：
-- 活动目录：
 - 输入文件：
 - 阶段结论：PASS / REVISE / BLOCKED
 
