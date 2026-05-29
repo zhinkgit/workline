@@ -43,7 +43,7 @@ description: "Workline 需求澄清与 PRD 生成。Use when the user provides a
 
 ## PRD 完成条件
 
-进入 `$workline-review` 或 `$workline-tasks` 前，`prd.md` 必须满足：
+进入 `$workline-tasks` 前，`prd.md` 必须满足：
 
 - 目标明确。
 - 非目标明确。
@@ -64,4 +64,4 @@ description: "Workline 需求澄清与 PRD 生成。Use when the user provides a
 - `prd.md` 路径。
 - 已闭环的关键决策。
 - 仍存在但不阻塞任务拆分的风险或待确认问题。
-- 下一步先使用 `$workline-review` 审查 `prd.md`；审查通过后再使用 `$workline-tasks`。
+- 下一步使用 `$workline-tasks` 拆分任务；如果用户希望先复核 PRD，再主动调用 `$workline-review`。

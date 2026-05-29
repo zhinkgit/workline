@@ -36,11 +36,11 @@ GIT_STATES = {"pending", "committed", "not_needed", "blocked", "skipped"}
 TERMINAL_DEV_STATES = {"done", "blocked", "skipped"}
 EVIDENCE_TAG_PATTERN = re.compile(r"\[evidence:([A-Za-z0-9_-]+)\]")
 DEFAULT_EVIDENCE_LEVELS = [
-    "local-test",
-    "mock-mqtt",
-    "board-smoke",
-    "real-device",
-    "manual-review",
+    "local",
+    "sim",
+    "target",
+    "real",
+    "manual",
 ]
 
 
@@ -301,18 +301,18 @@ def build_summary(rows: list[dict[str, str]]) -> dict[str, object]:
         for level in levels:
             evidence_level_counts[level] = evidence_level_counts.get(level, 0) + 1
 
-        if is_closed(row) and not has_evidence_ref:
+        if is_closed(row) and not levels:
             warnings.append(
                 {
-                    "code": "missing-evidence-ref",
+                    "code": "missing-evidence-level",
                     "task_id": task_id,
-                    "message": "done/passed task has no evidence/ reference",
+                    "message": "done/passed task has no [evidence:*] level tag",
                 }
             )
         if has_evidence_ref and not levels:
             warnings.append(
                 {
-                    "code": "missing-evidence-level",
+                    "code": "evidence-ref-without-level",
                     "task_id": task_id,
                     "message": "evidence reference has no [evidence:*] level tag",
                 }
@@ -320,21 +320,21 @@ def build_summary(rows: list[dict[str, str]]) -> dict[str, object]:
         if (
             row["mode"] == "HITL"
             and row["dev_state"] in TERMINAL_DEV_STATES
-            and not (levels & {"manual-review", "board-smoke", "real-device"})
+            and not (levels & {"manual", "target", "real"})
         ):
             warnings.append(
                 {
-                    "code": "hitl-without-manual-or-board-evidence",
+                    "code": "hitl-without-manual-target-or-real-evidence",
                     "task_id": task_id,
-                    "message": "HITL task has no manual-review, board-smoke, or real-device evidence tag",
+                    "message": "HITL task has no manual, target, or real evidence tag",
                 }
             )
-        if "board-smoke" in levels and "real-device" not in levels:
+        if "target" in levels and "real" not in levels:
             warnings.append(
                 {
-                    "code": "board-smoke-without-real-device",
+                    "code": "target-without-real",
                     "task_id": task_id,
-                    "message": "board-smoke evidence is present but real-device evidence is not",
+                    "message": "target evidence is present but real evidence is not",
                 }
             )
         if row["git_state"] == "pending" and row["dev_state"] in TERMINAL_DEV_STATES:

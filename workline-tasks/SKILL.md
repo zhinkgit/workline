@@ -87,5 +87,5 @@ python workline-tasks/scripts/workline_csv.py validate .workline/active/<slug>/t
 - `tasks.csv` 路径。
 - 任务数量和 `REVIEW` 依赖范围。
 - CSV 校验命令和结果。
-- 下一步先使用 `$workline-review` 审查 `tasks.csv`；审查通过后再使用 `/goal 根据 $workline-run 规范 执行 <tasks.csv>`。
+- 下一步使用 `/goal 根据 $workline-run 规范 执行 <tasks.csv>`；如果用户希望先复核任务拆分，再主动调用 `$workline-review`。
 

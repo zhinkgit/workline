@@ -40,7 +40,7 @@ workline/
 | --- | --- | --- |
 | `workline-init` | 创建 `.workline/active/<timestamp-slug>/`、`brief.md` 和 `references/` | 不追问、不写 PRD、不拆任务、不审查、不执行代码 |
 | `workline-grill` | 读取 `brief.md` 和 `references/`，逐问逐答澄清需求并生成 `prd.md` | 不生成 `tasks.csv`，不执行代码 |
-| `workline-review` | 审查 `prd.md` 或 `tasks.csv`，把阶段结论写入 `reviews/` | 不实现代码，不把审查报告当作新需求源，不替代修订阶段 |
+| `workline-review` | 可选审查 `prd.md` 或 `tasks.csv`，把阶段结论写入按需创建的 `reviews/` | 不实现代码，不把审查报告当作新需求源，不替代修订阶段 |
 | `workline-tasks` | 只根据 `prd.md` 拆分任务，生成并校验 `tasks.csv` | 不实现代码，不把未确认问题伪装成任务 |
 | `workline-run` | 作为 `/goal` 执行规则包，约束任务选择、状态更新、日志和 REVIEW | 不重新实现调度器，不替代 `/goal` |
 | `workline-archive` | 检查过程文件闭环后，将活动目录移动到 archive | 不补做任务，不伪造日志，不覆盖归档目录 |
@@ -55,11 +55,7 @@ workline/
 │       ├── prd.md
 │       ├── tasks.csv
 │       ├── run.md
-│       ├── references/          # PRD / grill 输入材料
-│       ├── evidence/            # 执行阶段按需创建
-│       └── reviews/              # 由 workline-review 按需创建
-│           ├── prd-review-2026-05-28-0915.md
-│           └── tasks-review-2026-05-28-1015.md
+│       └── references/          # PRD / grill 输入材料
 └── archive/
     └── 2026-05-28-0915-example/
 ```
@@ -68,7 +64,7 @@ workline/
 
 `references/` 默认保持浅层结构，只放进入 PRD / grill 阶段所需的输入材料，例如参考仓库软链接、旧实现、网页资料、协议文档和用户文件。它不再承载执行阶段产生的日志、截图、部署包或烟测记录。
 
-`evidence/` 由 `$workline-run` 在执行阶段按需创建，用来放 `/goal` 执行阶段产生的证据和中间产物，例如测试日志、构建日志、截图、配置快照、部署包、板端烟测记录。普通任务使用 `evidence/T003-config-manager/` 这类任务编号目录；多轮实机验证或多次尝试时，在任务目录下继续按尝试分组，例如：
+`evidence/` 不是默认目录。只有 `$workline-run` 在执行阶段产生需要保留的过程物时才创建它，例如测试日志、构建日志、截图、配置快照、部署包、板端烟测记录。普通任务使用 `evidence/T003-config-manager/` 这类任务编号目录；多轮实机验证或多次尝试时，在任务目录下继续按尝试分组，例如：
 
 ```text
 evidence/T012-board-check/
@@ -79,19 +75,19 @@ evidence/T012-board-check/
 
 `tasks.csv` 的 `refs` 字段可以同时引用 `prd.md`、`references/...` 和 `evidence/...`。
 
-执行证据应使用轻量标签标明证据等级。为了让 `summary` 可以稳定检查，机读证据路径和证据标签必须写入 `tasks.csv` 的 `refs` 或 `notes`；`run.md` 只负责展开说明过程、命令输出和判断依据。推荐标签：
+执行证据应使用轻量标签标明证据等级。为了让 `summary` 可以稳定检查，机读证据标签必须写入 `tasks.csv` 的 `refs` 或 `notes`；如果存在过程物路径，也写入 `refs` 或 `notes`。`run.md` 只负责展开说明过程、命令输出和判断依据。推荐标签：
 
 | 标签 | 含义 |
 | --- | --- |
-| `[evidence:local-test]` | 本地自动化测试、构建、静态检查或 dry-run |
-| `[evidence:mock-mqtt]` | mock、仿真、模拟 MQTT/协议输入输出 |
-| `[evidence:board-smoke]` | 已上板或目标环境烟测，但未覆盖真实外设/真实 ACK |
-| `[evidence:real-device]` | 真实设备、真实通信服务、真实 ACK 或现场链路验证 |
-| `[evidence:manual-review]` | 人工检查、截图复核、HITL 操作确认 |
+| `[evidence:local]` | 本地自动化测试、构建、静态检查或 dry-run |
+| `[evidence:sim]` | mock、仿真、模拟协议或模拟外部依赖 |
+| `[evidence:target]` | 已在目标环境或板端烟测，但未覆盖真实外设、真实服务或真实 ACK |
+| `[evidence:real]` | 真实设备、真实服务、真实 ACK 或现场链路验证 |
+| `[evidence:manual]` | 人工检查、截图复核、HITL 操作确认 |
 
 同一任务可以有多个证据等级。证据等级只帮助复盘和审查，不替代 `tasks.csv` 状态字段。
 
-`reviews/` 由 `workline-review` 按需创建，用来放 Workline 自审、人工审查或其它 AI 审查结果。审查报告不是新的需求源；它只指出 `prd.md` 或 `tasks.csv` 是否需要回到上一个阶段修订。
+`reviews/` 也不是默认目录。只有用户主动调用 `$workline-review`，或要求保存人工/其它 AI 审查意见时才创建。审查报告不是新的需求源；它只指出 `prd.md` 或 `tasks.csv` 是否需要回到上一个阶段修订。
 
 ## CSV 状态源
 
@@ -126,7 +122,7 @@ verify_state = passed
 
 | 检查点 | 时间 | 结论载体 | 职责 |
 | --- | --- | --- | --- |
-| `$workline-review` | PRD 后、执行前 | `reviews/*.md` | 阶段门禁，只判断是否能进入下一阶段 |
+| `$workline-review` | 用户主动要求复核时 | `reviews/*.md` | 可选阶段门禁，只判断是否能进入下一阶段 |
 | `REVIEW` 行 | `/goal` 执行末尾 | `tasks.csv` + `run.md` | 最终审计，只检查执行闭环，不补做实现 |
 | `$workline-archive` | 归档前 | 归档输出 | 搬运前核对，只确认闭环条件满足并移动目录 |
 
@@ -141,16 +137,16 @@ python workline-run/scripts/workline_csv.py summary .workline/active/<slug>/task
 
 默认输出给人阅读，`--json` 输出机器可读结果，方便 `$workline-review` 和 `$workline-archive` 复用。
 
-`summary` 的 warnings 是提醒型体检结果，不让命令因为 warning 失败。它只读取 `tasks.csv`，因此证据路径和 `[evidence:*]` 标签必须在 `refs` 或 `notes` 中出现。真正是否 `PASS`、`REVISE`、`BLOCKED`，仍由 `$workline-review` 和 `$workline-archive` 根据 PRD、`tasks.csv`、`run.md`、`reviews/` 和证据上下文判断。
+`summary` 的 warnings 是提醒型体检结果，不让命令因为 warning 失败。它只读取 `tasks.csv`，因此 `[evidence:*]` 标签必须在 `refs` 或 `notes` 中出现；如果有过程物路径，也应在 `refs` 或 `notes` 中出现。真正是否 `PASS`、`REVISE`、`BLOCKED`，仍由 `$workline-review` 或 `$workline-archive` 根据 PRD、`tasks.csv`、`run.md`、`reviews/` 和证据上下文判断。
 
 当前 warning 类型：
 
 | Warning | 触发条件 |
 | --- | --- |
-| `missing-evidence-ref` | 非 `REVIEW` 任务已 `done/passed`，但没有引用 `evidence/` |
-| `missing-evidence-level` | 引用了 `evidence/`，但没有 `[evidence:*]` 标签 |
-| `hitl-without-manual-or-board-evidence` | `mode=HITL` 的终态任务没有 `manual-review`、`board-smoke` 或 `real-device` 证据标签 |
-| `board-smoke-without-real-device` | 有 `board-smoke` 证据，但没有 `real-device` 证据 |
+| `missing-evidence-level` | 非 `REVIEW` 任务已 `done/passed`，但没有 `[evidence:*]` 标签 |
+| `evidence-ref-without-level` | 引用了 `evidence/`，但没有 `[evidence:*]` 标签 |
+| `hitl-without-manual-target-or-real-evidence` | `mode=HITL` 的终态任务没有 `manual`、`target` 或 `real` 证据标签 |
+| `target-without-real` | 有 `target` 证据，但没有 `real` 证据 |
 | `git-pending` | 非 `REVIEW` 终态任务 `git_state=pending` |
 | `skipped-or-blocked` | 任务存在 `skipped`、`blocked` 或 `failed` 状态 |
 
@@ -172,21 +168,13 @@ python workline-run/scripts/workline_csv.py summary .workline/active/<slug>/task
 
 1. 使用 `$workline-init` 创建活动目录，并把参考资料放进 `references/`。
 2. 使用 `$workline-grill` 读取活动目录，逐问逐答生成 `prd.md`。
-3. 使用 `$workline-review` 审查 `prd.md`：
-   - `PASS`：进入 `$workline-tasks`。
-   - `REVISE`：回到 `$workline-grill` 修订 `prd.md`。
-   - `BLOCKED`：补材料或确认关键决策后再继续。
-4. 使用 `$workline-tasks` 只根据 `prd.md` 生成 `tasks.csv`，并运行 CSV 校验。
-5. 使用 `$workline-review` 审查 `tasks.csv`：
-   - `PASS`：进入 `/goal`。
-   - `REVISE`：回到 `$workline-tasks` 修订 `tasks.csv`。
-   - `BLOCKED`：先修正 PRD 或任务定义中的阻塞问题。
-6. 使用 `/goal 根据 $workline-run 规范 执行 .workline/active/<slug>/tasks.csv` 进入实现阶段。
-7. 使用 `$workline-archive` 检查闭环后归档活动目录。
+3. 使用 `$workline-tasks` 只根据 `prd.md` 生成 `tasks.csv`，并运行 CSV 校验。
+4. 使用 `/goal 根据 $workline-run 规范 执行 .workline/active/<slug>/tasks.csv` 进入实现阶段。
+5. 使用 `$workline-archive` 检查闭环后归档活动目录。
 
 ## 审查与多 AI 复核
 
-阶段审查统一使用 `$workline-review`。在本对话中审查时，直接提供活动目录；交给其它 AI 工具复核时，也让它调用 `workline-review` Skill，并把审查报告写入活动目录的 `reviews/`。
+阶段审查是可选步骤。用户主动要求审查 PRD、审查 `tasks.csv`、汇总人工意见或交给其它 AI 工具复核时，统一使用 `$workline-review`，并把审查报告写入活动目录的 `reviews/`。
 
 人工审查意见也可以保存到 `reviews/`，再由 `$workline-review` 汇总判断。
 

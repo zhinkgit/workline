@@ -20,7 +20,7 @@ description: "归档已完成的 Workline 活动目录。Use when the user provi
 - `tasks.csv`
 - `run.md`
 - `references/`
-- `evidence/`，如果执行阶段产生了证据
+- `evidence/`，如果执行阶段产生了需要保留的过程物
 
 运行 CSV 校验：
 
@@ -33,9 +33,9 @@ python workline-run/scripts/workline_csv.py summary .workline/active/<slug>/task
 
 - `git-pending`：归档前必须有提交状态结论。
 - `skipped-or-blocked`：必须在 `run.md` 中说明用户确认、客观阻塞或跳过依据。
-- `missing-evidence-ref` / `missing-evidence-level`：已完成任务必须能从 `refs` 或 `notes` 追溯到验证产物，并带有 `[evidence:*]` 证据等级。
-- `hitl-without-manual-or-board-evidence`：HITL 任务必须有人工、板端或真实设备证据。
-- `board-smoke-without-real-device`：如果只有板端烟测，归档说明不能扩大为真实设备联调完成。
+- `missing-evidence-level` / `evidence-ref-without-level`：已完成任务必须能从 `refs` 或 `notes` 看到 `[evidence:*]` 证据等级；如果引用了过程物，也必须带证据等级。
+- `hitl-without-manual-target-or-real-evidence`：HITL 任务必须有人工、目标环境或真实链路证据。
+- `target-without-real`：如果只有目标环境烟测，归档说明不能扩大为真实设备联调完成。
 
 检查 `run.md`：
 
@@ -51,7 +51,7 @@ python workline-run/scripts/workline_csv.py summary .workline/active/<slug>/task
 - 不存在 `verify_state=failed`。
 - 所有 `skipped` 都在 `run.md` 中解释。
 - `REVIEW` 行已执行并闭环。
-- 已完成任务的 `refs` 或 `notes` 必须包含 `evidence/` 路径和 `[evidence:*]` 标签。
+- 已完成任务的 `refs` 或 `notes` 必须包含 `[evidence:*]` 标签；如果任务产生了过程物，还必须包含 `evidence/` 路径。
 
 如果存在 `reviews/`，检查：
 

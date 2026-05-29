@@ -19,7 +19,7 @@ description: "Workline 的 /goal 长任务执行规则包。Use when the user in
 
 ## 执行前检查
 
-1. 定位活动目录、`prd.md`、`tasks.csv`、`references/` 和 `evidence/`；如果缺少 `evidence/`，先创建。
+1. 定位活动目录、`prd.md`、`tasks.csv` 和 `references/`。不要预创建 `evidence/`；只有任务产生需要保留的过程物时才创建。
 2. 运行：
 
 ```bash
@@ -55,7 +55,7 @@ python workline-run/scripts/workline_csv.py set <tasks.csv> T001 --dev_state don
 
    如果任务确实无需提交，才把 `git_state` 更新为 `not_needed`；如果已经提交，更新为 `committed`。
 8. 如果任务产生 build log、截图、验证结果、配置快照、部署包或其它执行产物，把文件放入 `evidence/<task-id>-<name>/`，并通过 `--append-refs` 关联。`references/` 只放 PRD / grill 输入材料，不放执行证据。
-9. 追加证据引用时，必须同时把轻量证据标签写入 `refs` 或 `notes`，例如 `[evidence:local-test]`、`[evidence:mock-mqtt]`、`[evidence:board-smoke]`、`[evidence:real-device]`、`[evidence:manual-review]`；不要新增 CSV 字段。`run.md` 可以重复说明证据等级，但不能作为 `summary` 的机读输入。
+9. 追加证据引用时，必须同时把轻量证据标签写入 `refs` 或 `notes`，例如 `[evidence:local]`、`[evidence:sim]`、`[evidence:target]`、`[evidence:real]`、`[evidence:manual]`；不要新增 CSV 字段。`run.md` 可以重复说明证据等级，但不能作为 `summary` 的机读输入。
 
 多轮实机验证或多次尝试时，在同一个任务证据目录下按尝试分组，例如：
 
@@ -70,13 +70,13 @@ evidence/T012-board-check/
 
 | 标签 | 含义 |
 | --- | --- |
-| `[evidence:local-test]` | 本地测试、构建、静态检查或 dry-run |
-| `[evidence:mock-mqtt]` | mock、仿真、模拟 MQTT/协议输入输出 |
-| `[evidence:board-smoke]` | 已上板或目标环境烟测，但未覆盖真实外设/真实 ACK |
-| `[evidence:real-device]` | 真实设备、真实通信服务、真实 ACK 或现场链路验证 |
-| `[evidence:manual-review]` | 人工检查、截图复核、HITL 操作确认 |
+| `[evidence:local]` | 本地测试、构建、静态检查或 dry-run |
+| `[evidence:sim]` | mock、仿真、模拟协议或模拟外部依赖 |
+| `[evidence:target]` | 已在目标环境或板端烟测，但未覆盖真实外设、真实服务或真实 ACK |
+| `[evidence:real]` | 真实设备、真实服务、真实 ACK 或现场链路验证 |
+| `[evidence:manual]` | 人工检查、截图复核、HITL 操作确认 |
 
-如果只有 `[evidence:board-smoke]` 而没有 `[evidence:real-device]`，`notes`、`run.md` 和最终 REVIEW 必须明确说明“未覆盖真实设备/真实 ACK”，避免把模拟烟测扩大表述为真实联调完成。
+如果只有 `[evidence:target]` 而没有 `[evidence:real]`，`notes`、`run.md` 和最终 REVIEW 必须明确说明“未覆盖真实设备/真实 ACK”，避免把目标环境烟测扩大表述为真实联调完成。
 
 ## 失败与阻塞
 
@@ -96,7 +96,7 @@ REVIEW 需要检查：
 - PRD 功能要求和验收标准是否都有任务覆盖。
 - `tasks.csv` 状态是否一致。
 - 每条任务是否有验证记录、`run.md` 证据说明，以及 `refs` 或 `notes` 中的机读证据路径和标签。
-- `summary` warnings 是否已解释，尤其是证据标签缺失、HITL 证据不足和 `board-smoke` 未覆盖真实设备。
+- `summary` warnings 是否已解释，尤其是证据标签缺失、HITL 证据不足和 `target` 未覆盖真实链路。
 - 失败、阻塞、跳过是否有解释。
 - `git_state` 是否已有归档前结论。
 
