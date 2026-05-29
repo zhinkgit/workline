@@ -5,7 +5,7 @@ description: "Workline 的 /goal 长任务执行规则包。Use when the user in
 
 # Workline Run
 
-## 0. 定位
+## 目标
 
 本 Skill 规定 `/goal` 如何执行一份 Workline `tasks.csv`：读取下一任务、更新状态、记录执行日志，并处理最终 REVIEW。
 
@@ -26,7 +26,7 @@ description: "Workline 的 /goal 长任务执行规则包。Use when the user in
 /goal 根据 $workline-run 规范 执行 .workline/active/<slug>/tasks.csv
 ```
 
-## 1. 输入定位
+## 输入定位
 
 如果用户给的是活动目录：
 
@@ -41,7 +41,7 @@ description: "Workline 的 /goal 长任务执行规则包。Use when the user in
 2. 在父目录下寻找 `prd.md`、`run.md`、`references/`。
 3. 如果缺少 `prd.md` 或 `tasks.csv`，先停止并说明缺失项。
 
-## 2. 启动或恢复
+## 启动或恢复
 
 每次开始或恢复执行都先运行：
 
@@ -63,7 +63,7 @@ python workline-run/scripts/workline_csv.py summary <tasks.csv>
 3. `summary` 只作为状态快照；验证质量由任务验收、验证输出和 REVIEW 判断。
 4. 如果 `run.md` 不存在，创建它，并记录本次入口时间、PRD 路径和 CSV 路径。
 
-## 3. 读取任务
+## 读取任务
 
 对 `next` 返回的任务，先读取这些字段：
 
@@ -76,11 +76,11 @@ python workline-run/scripts/workline_csv.py summary <tasks.csv>
 | `verification` | 决定要跑什么验证或做什么人工检查 |
 | `refs` / `notes` | 查引用、记录验证摘要、阻塞原因和简短限制 |
 
-如果任务 `id=REVIEW`，跳到“7. REVIEW 行”。其它任务按“4. 普通任务执行”处理。
+如果任务 `id=REVIEW`，跳到“REVIEW 行”。其它任务按“普通任务执行”处理。
 
-## 4. 普通任务执行
+## 普通任务执行
 
-### 4.1 标记开始
+### 标记开始
 
 执行前把任务状态更新为 `doing`：
 
@@ -88,13 +88,13 @@ python workline-run/scripts/workline_csv.py summary <tasks.csv>
 python workline-run/scripts/workline_csv.py set <tasks.csv> T001 --dev_state doing --append-notes "started"
 ```
 
-### 4.2 处理 HITL
+### 处理 HITL
 
 如果 `mode=HITL`，并且任务需要人工输入、账号权限、实机操作、现场确认或高风险选择，先请求用户参与。
 
 人工确认、实机操作和外部 ACK 只记录已经真实发生的结果。
 
-### 4.3 实现
+### 实现
 
 按 `prd.md`、任务描述和验收标准做最小必要实现。
 
@@ -104,7 +104,7 @@ python workline-run/scripts/workline_csv.py set <tasks.csv> T001 --dev_state doi
 2. 验收标准保持不变。
 3. 发现任务定义和 PRD 冲突时，停止并请求确认。
 
-### 4.4 验证
+### 验证
 
 实现后按任务的 `verification` 字段验证。
 
@@ -115,7 +115,7 @@ python workline-run/scripts/workline_csv.py set <tasks.csv> T001 --dev_state doi
 3. 失败原因、阻塞项或未覆盖范围。
 4. 必要时说明未覆盖真实设备、真实服务或真实 ACK。
 
-### 4.5 写入 run.md
+### 写入 run.md
 
 `run.md` 只写人类需要复盘的信息，保持简短：
 
@@ -131,7 +131,7 @@ python workline-run/scripts/workline_csv.py set <tasks.csv> T001 --dev_state doi
 
 状态仍以 `tasks.csv` 为准。
 
-### 4.6 处理 evidence 产物
+### 处理 evidence 产物
 
 只有任务自然产生 build log、截图、验证结果、配置快照、部署包等可复查产物时，才创建 evidence 目录：
 
@@ -144,7 +144,7 @@ evidence/T012-board-check/
 
 创建后通过 `--append-refs` 关联路径。没有独立产物时省略 evidence 目录。
 
-### 4.7 标记验证通过
+### 标记验证通过
 
 验证通过后，把 `dev_state` 和 `verify_state` 更新完成，同时把 `git_state` 置为 `pending`，表示提交收口还没完成。
 
@@ -160,7 +160,7 @@ python workline-run/scripts/workline_csv.py set <tasks.csv> T001 --dev_state don
 python workline-run/scripts/workline_csv.py set <tasks.csv> T001 --append-refs "evidence/T001-smoke/"
 ```
 
-## 5. 提交收口
+## 提交收口
 
 任务验证通过后，自动尝试提交本任务的业务改动。
 
@@ -169,9 +169,9 @@ python workline-run/scripts/workline_csv.py set <tasks.csv> T001 --append-refs "
 1. 运行 `git status --short`，识别当前任务相关改动。
 2. 提交范围限于当前任务相关的业务代码、测试、文档或配置文件。
 3. 使用显式路径暂存文件。
-5. 如果没有业务改动需要提交，将 `git_state` 更新为 `done`，并在 `notes` 或 `run.md` 说明 `no business changes`。
-6. 如果业务改动归属清晰，暂存相关文件并执行一次任务级提交，然后将 `git_state` 更新为 `done`，并记录提交哈希。
-7. 如果当前环境无法安全提交，将 `git_state` 更新为 `blocked`，在 `notes` 和 `run.md` 写明原因，然后继续执行后续任务。
+4. 如果没有业务改动需要提交，将 `git_state` 更新为 `done`，并在 `notes` 或 `run.md` 说明 `no business changes`。
+5. 如果业务改动归属清晰，暂存相关文件并执行一次任务级提交，然后将 `git_state` 更新为 `done`，并记录提交哈希。
+6. 如果当前环境无法安全提交，将 `git_state` 更新为 `blocked`，在 `notes` 和 `run.md` 写明原因，然后继续执行后续任务。
 
 任务级提交信息推荐包含任务 ID：
 
@@ -179,7 +179,7 @@ python workline-run/scripts/workline_csv.py set <tasks.csv> T001 --append-refs "
 workline: T003 完成批量导入校验
 ```
 
-## 6. 失败与阻塞
+## 失败与阻塞
 
 失败时先保护状态真实性：
 
@@ -191,7 +191,7 @@ workline: T003 完成批量导入校验
 
 验证结论必须来自真实命令、人工检查或外部确认。
 
-## 7. REVIEW 行
+## REVIEW 行
 
 `REVIEW` 行只在所有非 `REVIEW` 任务闭环或已确认跳过后执行。
 
@@ -199,7 +199,8 @@ workline: T003 完成批量导入校验
 
 1. 不存在 `todo` 或 `doing` 的普通任务。
 2. 不存在未解释的 `failed` 或 `blocked` 任务。
-3. 不存在未解释的 `failed`、`blocked`、`skipped` 或 `git_state=pending/blocked`。
+3. 不存在未解释的 `skipped` 任务。
+4. 存在 `git_state=pending` 或 `git_state=blocked` 时可以执行 REVIEW，但必须记录为归档前待处理问题，不得视为已可归档。
 
 REVIEW 只做检查和结论。
 
@@ -211,14 +212,24 @@ REVIEW 只做检查和结论。
 4. 每条通过任务是否在 `run.md` 或 `notes` 中有验证摘要。
 5. 有独立产物的任务是否有 evidence 路径。
 6. HITL、真实链路未覆盖、失败、阻塞、跳过是否都有解释。
-7. `git_state` 是否已有归档前结论；存在 `pending` 或 `blocked` 时，只记录为归档前待处理问题。
+7. `git_state` 是否已有归档前结论；存在 `pending` 或 `blocked` 时，记录为归档前待处理问题。
 
 REVIEW 发现缺口时，只记录问题、更新状态，并按需要请求用户确认。
 
-## 8. 硬约束
+## 硬约束
 
 - `tasks.csv` 始终是计划和状态源。
 - 状态字段通过 `workline_csv.py set` 更新。
-- `tasks.csv` 是任务状态源。
 - 目标、功能要求和验收标准来自 `prd.md`。
 - 通过结论必须有真实验证依据。
+- `git_state=pending/blocked` 不阻止后续任务和 REVIEW，但会阻止 `$workline-archive` 归档。
+
+## 输出
+
+完成或暂停时说明：
+
+- 当前任务 ID 和状态更新结果。
+- `run.md` 记录位置，以及 evidence 产物路径（如有）。
+- 验证命令或人工检查结论。
+- `git_state` 结论；如果被阻塞，说明原因。
+- 如果执行的是 REVIEW，说明最终检查结论和归档前待处理问题。

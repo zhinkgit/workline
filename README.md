@@ -19,7 +19,8 @@ workline/
 │   └── templates/prd.md
 ├── workline-review/
 │   ├── SKILL.md
-│   └── agents/openai.yaml
+│   ├── agents/openai.yaml
+│   └── templates/review.md
 ├── workline-tasks/
 │   ├── SKILL.md
 │   ├── agents/openai.yaml
@@ -149,8 +150,6 @@ python workline-run/scripts/workline_csv.py summary .workline/active/<slug>/task
 默认输出给人阅读，`--json` 输出机器可读结果。需要快速了解任务状态时运行它。
 
 验证质量和阶段结论由 `$workline-review` 或 `$workline-archive` 根据 PRD、`tasks.csv`、`run.md`、`reviews/` 和实际验证上下文判断。
-
-当前 warning 类型：
 
 ## Git 提交
 
