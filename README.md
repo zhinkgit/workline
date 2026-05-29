@@ -64,7 +64,7 @@ workline/
 
 活动目录命名为 `YYYY-MM-DD-HHMM-brief-slug`。
 
-`brief.md` 由 `$workline-init` 基于 `workline-init/templates/brief.md` 创建，模板文件是文档结构的真相源；脚本只填充运行时占位符，例如创建时间。模板中的用户内容主要由用户手动填写。`references/` 默认创建为空目录并保持浅层结构，用于 PRD / grill 阶段输入材料，例如参考仓库软链接、旧实现、网页资料、协议文档和用户文件。
+`brief.md` 由 `$workline-init` 基于 `workline-init/templates/brief.md` 创建，模板文件是文档结构的真相源；脚本只填充运行时占位符，例如任务目录标题和创建时间。模板中的用户内容主要由用户手动填写。`references/` 默认创建为空目录并保持浅层结构，用于 PRD / grill 阶段输入材料，例如参考仓库软链接、旧实现、网页资料、协议文档和用户文件。
 
 `evidence/` 是执行阶段的可选过程物目录，用于保存测试日志、构建日志、截图、配置快照、部署包、板端烟测记录。普通任务使用 `evidence/T003-config-manager/` 这类任务编号目录；多轮实机验证或多次尝试时，在任务目录下继续按尝试分组，例如：
 

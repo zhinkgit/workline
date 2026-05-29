@@ -109,6 +109,8 @@ python workline-tasks/scripts/workline_csv.py summary .workline/active/<slug>/ta
 - PRD 审查：`reviews/prd-review-YYYY-MM-DD-HHMM.md`
 - Tasks 审查：`reviews/tasks-review-YYYY-MM-DD-HHMM.md`
 
+生成报告时，将模板中的 `{{title}}` 替换为活动目录名和审查目标，例如 `<活动目录名> - PRD 审查` 或 `<活动目录名> - Tasks 审查`。
+
 ## 硬约束
 
 - 审查只形成阶段结论和修订建议。

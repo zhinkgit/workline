@@ -22,7 +22,7 @@ description: "初始化 Workline 长任务过程目录。Use when the user wants
 3. 确认新目录包含：
    - `brief.md`
    - `references/`
-4. 返回活动目录路径，并提示用户手动填写 `brief.md`，把参考资料、旧代码、协议文档或其它输入材料放入 `references/`。
+4. 返回活动目录路径，并提示用户手动填写 `brief.md`，手动把参考资料、旧代码、协议文档或其它输入材料放入 `references/`。
 
 示例：
 

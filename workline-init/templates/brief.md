@@ -1,4 +1,4 @@
-# Brief: <标题>
+# Brief: {{title}}
 
 ## 创建时间
 

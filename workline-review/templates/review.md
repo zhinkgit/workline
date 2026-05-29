@@ -1,4 +1,4 @@
-# Review: <标题>
+# Review: {{title}}
 
 ## 基本信息
 
