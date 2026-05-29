@@ -14,7 +14,6 @@ description: "根据 Workline PRD 生成或修订可执行 tasks.csv。Use when 
 开始前确认：
 
 - `prd.md` 存在。
-- PRD 章节完整。
 - 关键问题已确认。
 - 非阻塞待确认问题已说明为什么不阻塞任务拆分。
 - 如果 `reviews/prd-review-*.md` 存在且最新结论是 `REVISE` 或 `BLOCKED`，先要求回到 `$workline-grill` 修订 PRD。
@@ -26,24 +25,25 @@ description: "根据 Workline PRD 生成或修订可执行 tasks.csv。Use when 
 
 - `prd.md` 是唯一需求源；审查报告只能作为质量反馈，不能引入 PRD 之外的新需求。
 - 每条任务都应能单独实现、单独验证、单独记录状态。
-- 每条非 `REVIEW` 任务必须填写：
-  - `id`
-  - `depends_on`
-  - `mode`
-  - `title`
-  - `description`
-  - `acceptance_criteria`
-  - `verification`
-  - `dev_state`
-  - `verify_state`
-  - `git_state`
-  - `refs`
-  - `notes`
 - 默认状态为 `dev_state=todo`、`verify_state=pending`、`git_state=pending`。
-- `mode=AFK` 表示可自动执行；`mode=HITL` 表示需要人工输入、实机操作、账号权限或关键确认。
-- `refs` 引用 PRD 章节、`references/...` 输入材料或后续 `evidence/...` 运行证据路径。
-- `git_state` 只允许 `pending`、`done`、`blocked`；默认生成 `pending`。
 - 最后一行必须是 `REVIEW`，并依赖所有非 `REVIEW` 任务。
+
+字段含义：
+
+| 字段 | 说明 |
+| --- | --- |
+| `id` | 任务 ID，如 `T001`；末行固定为 `REVIEW` |
+| `depends_on` | 依赖任务 ID，多个用空格分隔 |
+| `mode` | `AFK` 可自动执行；`HITL` 需要人工、实机、账号或关键确认 |
+| `title` | 简短任务标题 |
+| `description` | 任务范围和实现说明 |
+| `acceptance_criteria` | 完成条件 |
+| `verification` | 验证命令或人工检查方式 |
+| `dev_state` | 开发状态：`todo`、`doing`、`done`、`blocked`、`skipped` |
+| `verify_state` | 验证状态：`pending`、`passed`、`failed`、`blocked`、`skipped` |
+| `git_state` | 提交状态：`pending`、`done`、`blocked` |
+| `refs` | PRD、`references/...` 或 `evidence/...` 等相关引用 |
+| `notes` | 阻塞、跳过、验证摘要、提交哈希等备注 |
 
 ## CSV 生成
 
@@ -52,8 +52,6 @@ description: "根据 Workline PRD 生成或修订可执行 tasks.csv。Use when 
 ```csv
 id,depends_on,mode,title,description,acceptance_criteria,verification,dev_state,verify_state,git_state,refs,notes
 ```
-
-这是唯一合法表头；不要生成旧字段 `review_state`。
 
 写 CSV 时使用标准 CSV 转义；字段里有逗号、换行或引号时必须正确引用。
 
@@ -71,7 +69,7 @@ python workline-tasks/scripts/workline_csv.py validate .workline/active/<slug>/t
 
 - 是最后一行。
 - `depends_on` 包含所有非 `REVIEW` 任务 ID。
-- 检查 PRD 覆盖、CSV 状态、验证记录、`run.md` 证据、失败/跳过解释和 `git_state` 结论。
+- 检查 PRD 覆盖、CSV 状态、验证记录、`run.md` 验证说明、失败/跳过解释和 `git_state` 结论。
 - 不补做实现任务。
 
 ## 硬约束

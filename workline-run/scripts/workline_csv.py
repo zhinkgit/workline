@@ -7,7 +7,6 @@ import argparse
 import csv
 import json
 import os
-import re
 import sys
 import tempfile
 from pathlib import Path
@@ -34,14 +33,6 @@ DEV_STATES = {"todo", "doing", "done", "blocked", "skipped"}
 VERIFY_STATES = {"pending", "passed", "failed", "blocked", "skipped"}
 GIT_STATES = {"pending", "done", "blocked"}
 TERMINAL_DEV_STATES = {"done", "blocked", "skipped"}
-EVIDENCE_TAG_PATTERN = re.compile(r"\[evidence:([A-Za-z0-9_-]+)\]")
-DEFAULT_EVIDENCE_LEVELS = [
-    "local",
-    "sim",
-    "target",
-    "real",
-    "manual",
-]
 
 
 class WorklineCsvError(Exception):
@@ -278,65 +269,13 @@ def command_next(args: argparse.Namespace) -> int:
     return 0
 
 
-def evidence_levels(row: dict[str, str]) -> set[str]:
-    text = f"{row['refs']} {row['notes']}"
-    return {match.group(1) for match in EVIDENCE_TAG_PATTERN.finditer(text)}
-
-
 def build_summary(rows: list[dict[str, str]]) -> dict[str, object]:
     non_review = [row for row in rows if row["id"] != "REVIEW"]
     final_review = find_row(rows, "REVIEW")
     warnings: list[dict[str, str]] = []
-    evidence_level_counts = {level: 0 for level in DEFAULT_EVIDENCE_LEVELS}
-    tasks_with_evidence_refs = 0
 
     for row in non_review:
         task_id = row["id"]
-        refs_and_notes = f"{row['refs']} {row['notes']}"
-        has_evidence_ref = "evidence/" in refs_and_notes.replace("\\", "/")
-        levels = evidence_levels(row)
-
-        if has_evidence_ref:
-            tasks_with_evidence_refs += 1
-        for level in levels:
-            evidence_level_counts[level] = evidence_level_counts.get(level, 0) + 1
-
-        if is_closed(row) and not levels:
-            warnings.append(
-                {
-                    "code": "missing-evidence-level",
-                    "task_id": task_id,
-                    "message": "done/passed task has no [evidence:*] level tag",
-                }
-            )
-        if has_evidence_ref and not levels:
-            warnings.append(
-                {
-                    "code": "evidence-ref-without-level",
-                    "task_id": task_id,
-                    "message": "evidence reference has no [evidence:*] level tag",
-                }
-            )
-        if (
-            row["mode"] == "HITL"
-            and row["dev_state"] in TERMINAL_DEV_STATES
-            and not (levels & {"manual", "target", "real"})
-        ):
-            warnings.append(
-                {
-                    "code": "hitl-without-manual-target-or-real-evidence",
-                    "task_id": task_id,
-                    "message": "HITL task has no manual, target, or real evidence tag",
-                }
-            )
-        if "target" in levels and "real" not in levels:
-            warnings.append(
-                {
-                    "code": "target-without-real",
-                    "task_id": task_id,
-                    "message": "target evidence is present but real evidence is not",
-                }
-            )
         if row["git_state"] == "pending" and row["dev_state"] in TERMINAL_DEV_STATES:
             warnings.append(
                 {
@@ -400,11 +339,6 @@ def build_summary(rows: list[dict[str, str]]) -> dict[str, object]:
             "verify_state": final_review["verify_state"],
             "git_state": final_review["git_state"],
         },
-        "evidence_refs": {
-            "count": tasks_with_evidence_refs,
-            "total": len(non_review),
-        },
-        "evidence_levels": evidence_level_counts,
         "warnings": warnings,
     }
 
@@ -417,13 +351,8 @@ def format_summary(summary: dict[str, object]) -> str:
     skipped = summary["skipped"]
     git_pending = summary["git_pending"]
     final_review = summary["final_review"]
-    evidence_refs = summary["evidence_refs"]
-    evidence_levels = summary["evidence_levels"]
     warnings = summary["warnings"]
 
-    level_text = ", ".join(
-        f"{level}={count}" for level, count in sorted(evidence_levels.items())
-    )
     lines = [
         f"OK: {summary['rows_total']} rows",
         f"closed: {closed['count']}/{summary['non_review_total']} non-review tasks",
@@ -433,8 +362,6 @@ def format_summary(summary: dict[str, object]) -> str:
         f"skipped: {skipped['count']}",
         f"git_pending: {git_pending['count']}",
         f"final_review: {final_review['dev_state']}/{final_review['verify_state']}/{final_review['git_state']}",
-        f"evidence_refs: {evidence_refs['count']}/{evidence_refs['total']} non-review tasks",
-        f"evidence_levels: {level_text}",
         f"warnings: {len(warnings)}",
     ]
     for warning in warnings:
@@ -478,7 +405,7 @@ def build_parser() -> argparse.ArgumentParser:
     next_parser.add_argument("csv_path")
     next_parser.set_defaults(func=command_next)
 
-    summary_parser = subparsers.add_parser("summary", help="print task status and evidence summary")
+    summary_parser = subparsers.add_parser("summary", help="print optional task status summary")
     summary_parser.add_argument("csv_path")
     summary_parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
     summary_parser.set_defaults(func=command_summary)

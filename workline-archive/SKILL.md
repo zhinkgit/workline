@@ -26,24 +26,19 @@ description: "归档已完成的 Workline 活动目录。Use when the user provi
 
 ```bash
 python workline-run/scripts/workline_csv.py validate .workline/active/<slug>/tasks.csv
-python workline-run/scripts/workline_csv.py summary .workline/active/<slug>/tasks.csv
 ```
 
-`summary` warnings 不会让命令失败，但归档前必须逐项判断是否已经解释。尤其关注：
+如果需要快速了解任务状态分布，可以额外运行：
 
-- `git-pending`：归档前必须有提交状态结论。
-- `skipped-or-blocked` 中的 `git_state=blocked`：任务验证已通过但自动提交未闭环，归档前必须人工处理。
-- `skipped-or-blocked`：必须在 `run.md` 中说明用户确认、客观阻塞或跳过依据。
-- `missing-evidence-level` / `evidence-ref-without-level`：已完成任务必须能从 `refs` 或 `notes` 看到 `[evidence:*]` 证据等级；如果引用了过程物，也必须带证据等级。
-- `hitl-without-manual-target-or-real-evidence`：HITL 任务必须有人工、目标环境或真实链路证据。
-- `target-without-real`：如果只有目标环境烟测，归档说明不能扩大为真实设备联调完成。
+```bash
+python workline-run/scripts/workline_csv.py summary .workline/active/<slug>/tasks.csv
+```
 
 检查 `run.md`：
 
 - 已包含最终 REVIEW 结论。
 - 已说明阻塞、跳过、失败项。
 - 已说明每条任务的 `git_state` 最终状态；归档前不允许留下 `pending` 或 `blocked`。
-- 已说明 `summary` warnings 的处理结论；如果 warning 未解释，停止归档。
 
 检查 `tasks.csv`：
 
@@ -53,7 +48,7 @@ python workline-run/scripts/workline_csv.py summary .workline/active/<slug>/task
 - 不存在 `git_state=pending` 或 `git_state=blocked`。
 - 所有 `skipped` 都在 `run.md` 中解释。
 - `REVIEW` 行已执行并闭环。
-- 已完成任务的 `refs` 或 `notes` 必须包含 `[evidence:*]` 标签；如果任务产生了过程物，还必须包含 `evidence/` 路径。
+- 如果任务产生了过程物，必须在 `refs`、`notes` 或 `run.md` 中包含 `evidence/` 路径。
 
 如果存在 `reviews/`，检查：
 
@@ -106,6 +101,6 @@ git commit -m "workline: archive <slug>"
 
 - 归档源路径。
 - 归档目标路径。
-- CSV、`summary` warnings、`reviews/`、`run.md`、`evidence/`（如存在）和 REVIEW 检查结果。
+- CSV、`reviews/`、`run.md`、`evidence/`（如存在）和 REVIEW 检查结果。
 - 归档提交结果；如果提交失败，给出需要用户处理的 Git 状态。
 

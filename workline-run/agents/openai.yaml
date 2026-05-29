@@ -1,4 +1,4 @@
 interface:
   display_name: "Workline Run"
-  short_description: "约束goal按tasks.csv执行任务并记录验证证据"
+  short_description: "约束goal按tasks.csv执行任务并记录验证摘要"
   default_prompt: "Use $workline-run with /goal to execute a Workline tasks.csv and keep run.md updated."

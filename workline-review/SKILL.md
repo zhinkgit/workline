@@ -23,7 +23,6 @@ description: "审查 Workline 阶段产物并形成阶段门禁结论。Use when
 
 - `brief.md` 存在。
 - `references/` 存在。
-- `evidence/` 不要求预先存在；执行阶段已有过程物时再检查。
 - 审查 PRD 时，`prd.md` 存在。
 - 审查任务时，`prd.md` 和 `tasks.csv` 都存在。
 - `reviews/` 不存在时创建；不要覆盖已有审查记录。
@@ -73,18 +72,22 @@ description: "审查 Workline 阶段产物并形成阶段门禁结论。Use when
 
 - `prd.md`
 - `tasks.csv`
-- `references/` 一级目录和必要输入材料
-- 已存在的 `evidence/` 任务证据目录；不存在时不要视为问题
+- `references/` 一级目录和必要文件
 - 已有 `reviews/tasks-review-*.md` 或用户指定的审查意见
 
 先运行 CSV 校验；优先使用当前仓库中的脚本：
 
 ```bash
 python workline-tasks/scripts/workline_csv.py validate .workline/active/<slug>/tasks.csv
+```
+
+如果需要快速了解任务状态分布，可以额外运行：
+
+```bash
 python workline-tasks/scripts/workline_csv.py summary .workline/active/<slug>/tasks.csv
 ```
 
-`summary` warnings 是提醒型复盘结果，不自动决定阶段结论。它只读取 `tasks.csv`；审查者需要结合 PRD、`run.md`、`evidence/` 和上下文判断这些 warning 是阻塞问题、需要修订的问题、可选建议，还是已有合理解释。
+`summary` 只是可选状态快照，不自动决定阶段结论。审查者需要结合 PRD、`run.md` 和上下文判断是否存在阻塞问题、需要修订的问题或可选建议。
 
 检查：
 
@@ -96,10 +99,9 @@ python workline-tasks/scripts/workline_csv.py summary .workline/active/<slug>/ta
 - `mode=AFK/HITL` 是否合理，人工输入、实机操作、账号权限是否被标为 HITL。
 - `REVIEW` 行是否最后一行，并依赖所有非 `REVIEW` 任务。
 - `verification` 是否是真实可执行的验证命令或人工检查，不是空泛描述。
-- 已执行任务的验证产物是否优先落在 `evidence/<task-id>-<name>/`，而不是混入 `references/`。
-- 已执行任务是否在 `refs` 或 `notes` 中标明机读证据等级，例如 `[evidence:local]`、`[evidence:sim]`、`[evidence:target]`、`[evidence:real]`、`[evidence:manual]`；只写在 `run.md` 中不算通过。如果产生了过程物，还应引用 `evidence/...` 路径。
-- `mode=HITL` 的任务是否具备人工、目标环境或真实链路证据；只有 `[evidence:target]` 时，是否明确说明未覆盖真实设备或真实 ACK。
-- `summary` 输出的 `git-pending`、`skipped-or-blocked`、缺证据路径、缺证据等级等 warnings 是否已有解释或需要修订；其中 `git_state=blocked` 表示验证已通过但自动提交未闭环，不应反向否定任务验证结论。
+- 已执行任务是否在 `run.md` 或 `notes` 中记录验证命令、人工检查动作和真实输出摘要；如果产生了过程物，还应引用 `evidence/...` 路径。
+- `mode=HITL` 的任务是否说明人工输入、实机操作、账号权限或关键确认的完成情况；如果未覆盖真实设备、真实服务或真实 ACK，是否明确说明。
+- `git_state=pending/blocked`、`skipped`、`blocked`、`failed` 是否已有解释或需要修订；其中 `git_state=blocked` 表示验证已通过但自动提交未闭环，不应反向否定任务验证结论。
 
 结论：
 
@@ -161,7 +163,7 @@ python workline-tasks/scripts/workline_csv.py summary .workline/active/<slug>/ta
 - 不实现代码。
 - 不把审查报告当作新的需求源；`prd.md` 仍是任务拆分的需求源。
 - 不降低 `prd.md` 的验收标准。
-- 不把缺少证据的判断写成已确认事实。
+- 不把缺少验证记录的判断写成已确认事实。
 - 不覆盖已有 review 文件；同一分钟重名时追加短后缀。
 - 不把完整聊天流水写入审查报告，只保留关键问题、判断和建议。
 

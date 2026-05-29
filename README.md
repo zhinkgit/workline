@@ -73,19 +73,7 @@ evidence/T012-board-check/
 └── smoke/
 ```
 
-`tasks.csv` 的 `refs` 字段可以同时引用 `prd.md`、`references/...` 和 `evidence/...`。
-
-执行证据应使用轻量标签标明证据等级。为了让 `summary` 可以稳定检查，机读证据标签必须写入 `tasks.csv` 的 `refs` 或 `notes`；如果存在过程物路径，也写入 `refs` 或 `notes`。`run.md` 只负责展开说明过程、命令输出和判断依据。推荐标签：
-
-| 标签 | 含义 |
-| --- | --- |
-| `[evidence:local]` | 本地自动化测试、构建、静态检查或 dry-run |
-| `[evidence:sim]` | mock、仿真、模拟协议或模拟外部依赖 |
-| `[evidence:target]` | 已在目标环境或板端烟测，但未覆盖真实外设、真实服务或真实 ACK |
-| `[evidence:real]` | 真实设备、真实服务、真实 ACK 或现场链路验证 |
-| `[evidence:manual]` | 人工检查、截图复核、HITL 操作确认 |
-
-同一任务可以有多个证据等级。证据等级只帮助复盘和审查，不替代 `tasks.csv` 状态字段。
+`tasks.csv` 的 `refs` 字段可以同时引用 `prd.md`、`references/...` 和 `evidence/...`。验证命令、人工检查动作、真实输出摘要和未覆盖范围写入 `run.md`，必要的短备注写入 `notes`。如果存在过程物路径，也写入 `refs`、`notes` 或 `run.md`。
 
 `reviews/` 也不是默认目录。只有用户主动调用 `$workline-review`，或要求保存人工/其它 AI 审查意见时才创建。审查报告不是新的需求源；它只指出 `prd.md` 或 `tasks.csv` 是否需要回到上一个阶段修订。
 
@@ -96,6 +84,23 @@ evidence/T012-board-check/
 ```csv
 id,depends_on,mode,title,description,acceptance_criteria,verification,dev_state,verify_state,git_state,refs,notes
 ```
+
+字段含义：
+
+| 字段 | 说明 |
+| --- | --- |
+| `id` | 任务 ID。普通任务使用 `T001` 这类稳定编号；最后一行固定为 `REVIEW` |
+| `depends_on` | 依赖任务 ID，多个 ID 用空格分隔；依赖满足后任务才可进入执行 |
+| `mode` | 执行模式。`AFK` 表示可自动执行；`HITL` 表示需要人工输入、实机操作、账号权限或关键确认 |
+| `title` | 任务标题，用一句话标识任务目标 |
+| `description` | 任务说明，写清要改什么、覆盖什么范围 |
+| `acceptance_criteria` | 验收标准，描述什么结果才算完成 |
+| `verification` | 验证方式，优先写真实可执行命令；无法自动验证时写人工检查方式 |
+| `dev_state` | 开发状态，表示实现侧进度 |
+| `verify_state` | 验证状态，表示验收或检查结果 |
+| `git_state` | 提交收口状态，只记录任务相关业务改动是否已提交、无需提交或被阻塞 |
+| `refs` | 相关引用，可指向 PRD 章节、`references/...` 输入材料或 `evidence/...` 运行产物 |
+| `notes` | 备注，记录阻塞原因、跳过依据、验证摘要、提交哈希等短信息 |
 
 状态枚举：
 
@@ -122,7 +127,7 @@ verify_state = passed
 
 `git_state=blocked` 不改变 `dev_state=done` / `verify_state=passed` 的验证结论，也不阻止继续执行后续任务，但归档前必须处理完。
 
-`REVIEW` 行必须是最后一行，且依赖所有非 `REVIEW` 任务。它检查 PRD 覆盖、CSV 状态、验证记录、`run.md` 证据、失败/跳过解释和提交状态结论，不能补做实现任务。
+`REVIEW` 行必须是最后一行，且依赖所有非 `REVIEW` 任务。它检查 PRD 覆盖、CSV 状态、验证记录、`run.md` 验证说明、失败/跳过解释和提交状态结论，不能补做实现任务。
 
 三类检查的职责边界固定如下：
 
@@ -132,29 +137,20 @@ verify_state = passed
 | `REVIEW` 行 | `/goal` 执行末尾 | `tasks.csv` + `run.md` | 最终审计，只检查执行闭环，不补做实现 |
 | `$workline-archive` | 归档前 | 归档输出 | 搬运前核对，只确认闭环条件满足并移动目录 |
 
-## 复盘摘要
+## 状态快照
 
-`workline_csv.py summary` 用于快速复盘 `tasks.csv` 状态和证据质量。它只读取 `tasks.csv`，不写入文件，不成为新的状态源。
+`workline_csv.py summary` 是可选状态快照工具，用于快速查看 `tasks.csv` 的状态分布。它只读取 `tasks.csv`，不写入文件，不成为新的状态源，也不是阶段门禁。
 
 ```bash
 python workline-run/scripts/workline_csv.py summary .workline/active/<slug>/tasks.csv
 python workline-run/scripts/workline_csv.py summary .workline/active/<slug>/tasks.csv --json
 ```
 
-默认输出给人阅读，`--json` 输出机器可读结果，方便 `$workline-review` 和 `$workline-archive` 复用。
+默认输出给人阅读，`--json` 输出机器可读结果。需要快速了解任务状态时可以运行它，但 `$workline-run`、`$workline-review` 和 `$workline-archive` 不应把它作为每阶段强制步骤。
 
-`summary` 的 warnings 是提醒型体检结果，不让命令因为 warning 失败。它只读取 `tasks.csv`，因此 `[evidence:*]` 标签必须在 `refs` 或 `notes` 中出现；如果有过程物路径，也应在 `refs` 或 `notes` 中出现。真正是否 `PASS`、`REVISE`、`BLOCKED`，仍由 `$workline-review` 或 `$workline-archive` 根据 PRD、`tasks.csv`、`run.md`、`reviews/` 和证据上下文判断。
+`summary` 只读取 `tasks.csv`，因此不会判断验证质量；真正是否 `PASS`、`REVISE`、`BLOCKED`，仍由 `$workline-review` 或 `$workline-archive` 根据 PRD、`tasks.csv`、`run.md`、`reviews/` 和实际验证上下文判断。
 
 当前 warning 类型：
-
-| Warning | 触发条件 |
-| --- | --- |
-| `missing-evidence-level` | 非 `REVIEW` 任务已 `done/passed`，但没有 `[evidence:*]` 标签 |
-| `evidence-ref-without-level` | 引用了 `evidence/`，但没有 `[evidence:*]` 标签 |
-| `hitl-without-manual-target-or-real-evidence` | `mode=HITL` 的终态任务没有 `manual`、`target` 或 `real` 证据标签 |
-| `target-without-real` | 有 `target` 证据，但没有 `real` 证据 |
-| `git-pending` | 非 `REVIEW` 终态任务 `git_state=pending` |
-| `skipped-or-blocked` | 任务存在 `skipped`、`blocked` 或 `failed` 状态 |
 
 ## Git 提交
 
@@ -179,7 +175,7 @@ Workline 过程文件由 `$workline-archive` 在移动到 `.workline/archive/<sl
 | `workline-tasks/templates/tasks.csv` | `workline-tasks` | 生成 `tasks.csv` |
 | `workline-init/scripts/init_workline.py` | `workline-init` | 初始化活动目录 |
 | `workline-tasks/scripts/workline_csv.py` | `workline-tasks` | 任务拆分后校验 CSV |
-| `workline-run/scripts/workline_csv.py` | `workline-run` | 执行阶段校验、更新 CSV、定位下一任务、生成复盘摘要 |
+| `workline-run/scripts/workline_csv.py` | `workline-run` | 执行阶段校验、更新 CSV、定位下一任务、按需生成状态快照 |
 
 两份 `workline_csv.py` 必须保持实现一致。修改其中一份时，直接同步另一份，并用文件哈希或 diff 确认一致后再分别运行校验。
 
