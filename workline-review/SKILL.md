@@ -81,7 +81,10 @@ description: "审查 Workline 阶段产物并形成阶段门禁结论。Use when
 
 ```bash
 python workline-tasks/scripts/workline_csv.py validate .workline/active/<slug>/tasks.csv
+python workline-tasks/scripts/workline_csv.py summary .workline/active/<slug>/tasks.csv
 ```
+
+`summary` warnings 是提醒型复盘结果，不自动决定阶段结论。审查者需要结合 PRD、`run.md`、`evidence/` 和上下文判断这些 warning 是阻塞问题、需要修订的问题、可选建议，还是已有合理解释。
 
 检查：
 
@@ -94,6 +97,9 @@ python workline-tasks/scripts/workline_csv.py validate .workline/active/<slug>/t
 - `REVIEW` 行是否最后一行，并依赖所有非 `REVIEW` 任务。
 - `verification` 是否是真实可执行的验证命令或人工检查，不是空泛描述。
 - 已执行任务的验证产物是否优先落在 `evidence/<task-id>-<name>/`，而不是混入 `references/`。
+- 已执行任务是否在 `refs`、`notes` 或 `run.md` 中标明证据等级，例如 `[evidence:local-test]`、`[evidence:mock-mqtt]`、`[evidence:board-smoke]`、`[evidence:real-device]`、`[evidence:manual-review]`。
+- `mode=HITL` 的任务是否具备人工、板端或真实设备证据；只有 `[evidence:board-smoke]` 时，是否明确说明未覆盖真实设备或真实 ACK。
+- `summary` 输出的 `git-pending`、`skipped-or-blocked`、缺证据路径、缺证据等级等 warnings 是否已有解释或需要修订。
 
 结论：
 
@@ -137,6 +143,15 @@ python workline-tasks/scripts/workline_csv.py validate .workline/active/<slug>/t
 ## 可选建议
 
 ## 覆盖检查
+
+## Summary Warnings
+
+- 命令：
+- warning 数量：
+- 采纳为阻塞：
+- 采纳为需修订：
+- 采纳为可选建议：
+- 已解释或不采纳：
 
 ## 建议下一步
 ```

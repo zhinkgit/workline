@@ -7,6 +7,7 @@ import argparse
 import csv
 import json
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -33,6 +34,14 @@ DEV_STATES = {"todo", "doing", "done", "blocked", "skipped"}
 REVIEW_STATES = {"pending", "passed", "failed", "blocked", "skipped"}
 GIT_STATES = {"pending", "committed", "not_needed", "blocked", "skipped"}
 TERMINAL_DEV_STATES = {"done", "blocked", "skipped"}
+EVIDENCE_TAG_PATTERN = re.compile(r"\[evidence:([A-Za-z0-9_-]+)\]")
+DEFAULT_EVIDENCE_LEVELS = [
+    "local-test",
+    "mock-mqtt",
+    "board-smoke",
+    "real-device",
+    "manual-review",
+]
 
 
 class WorklineCsvError(Exception):
@@ -269,6 +278,184 @@ def command_next(args: argparse.Namespace) -> int:
     return 0
 
 
+def evidence_levels(row: dict[str, str]) -> set[str]:
+    text = f"{row['refs']} {row['notes']}"
+    return {match.group(1) for match in EVIDENCE_TAG_PATTERN.finditer(text)}
+
+
+def build_summary(rows: list[dict[str, str]]) -> dict[str, object]:
+    non_review = [row for row in rows if row["id"] != "REVIEW"]
+    review = find_row(rows, "REVIEW")
+    warnings: list[dict[str, str]] = []
+    evidence_level_counts = {level: 0 for level in DEFAULT_EVIDENCE_LEVELS}
+    tasks_with_evidence_refs = 0
+
+    for row in non_review:
+        task_id = row["id"]
+        refs_and_notes = f"{row['refs']} {row['notes']}"
+        has_evidence_ref = "evidence/" in refs_and_notes.replace("\\", "/")
+        levels = evidence_levels(row)
+
+        if has_evidence_ref:
+            tasks_with_evidence_refs += 1
+        for level in levels:
+            evidence_level_counts[level] = evidence_level_counts.get(level, 0) + 1
+
+        if is_closed(row) and not has_evidence_ref:
+            warnings.append(
+                {
+                    "code": "missing-evidence-ref",
+                    "task_id": task_id,
+                    "message": "done/passed task has no evidence/ reference",
+                }
+            )
+        if has_evidence_ref and not levels:
+            warnings.append(
+                {
+                    "code": "missing-evidence-level",
+                    "task_id": task_id,
+                    "message": "evidence reference has no [evidence:*] level tag",
+                }
+            )
+        if (
+            row["mode"] == "HITL"
+            and row["dev_state"] in TERMINAL_DEV_STATES
+            and not (levels & {"manual-review", "board-smoke", "real-device"})
+        ):
+            warnings.append(
+                {
+                    "code": "hitl-without-manual-or-board-evidence",
+                    "task_id": task_id,
+                    "message": "HITL task has no manual-review, board-smoke, or real-device evidence tag",
+                }
+            )
+        if "board-smoke" in levels and "real-device" not in levels:
+            warnings.append(
+                {
+                    "code": "board-smoke-without-real-device",
+                    "task_id": task_id,
+                    "message": "board-smoke evidence is present but real-device evidence is not",
+                }
+            )
+        if row["git_state"] == "pending" and row["dev_state"] in TERMINAL_DEV_STATES:
+            warnings.append(
+                {
+                    "code": "git-pending",
+                    "task_id": task_id,
+                    "message": "git_state is still pending",
+                }
+            )
+        if (
+            row["dev_state"] in {"blocked", "skipped"}
+            or row["review_state"] in {"failed", "blocked", "skipped"}
+            or row["git_state"] in {"blocked", "skipped"}
+        ):
+            warnings.append(
+                {
+                    "code": "skipped-or-blocked",
+                    "task_id": task_id,
+                    "message": "task contains skipped, blocked, or failed state",
+                }
+            )
+
+    return {
+        "rows_total": len(rows),
+        "non_review_total": len(non_review),
+        "closed": {
+            "count": sum(1 for row in non_review if is_closed(row)),
+            "ids": [row["id"] for row in non_review if is_closed(row)],
+        },
+        "todo_or_doing": {
+            "count": sum(1 for row in non_review if row["dev_state"] in {"todo", "doing"}),
+            "ids": [row["id"] for row in non_review if row["dev_state"] in {"todo", "doing"}],
+        },
+        "blocked": {
+            "count": sum(1 for row in non_review if row["dev_state"] == "blocked"),
+            "ids": [row["id"] for row in non_review if row["dev_state"] == "blocked"],
+        },
+        "failed": {
+            "count": sum(1 for row in non_review if row["review_state"] == "failed"),
+            "ids": [row["id"] for row in non_review if row["review_state"] == "failed"],
+        },
+        "skipped": {
+            "count": sum(
+                1
+                for row in non_review
+                if row["dev_state"] == "skipped"
+                or row["review_state"] == "skipped"
+                or row["git_state"] == "skipped"
+            ),
+            "ids": [
+                row["id"]
+                for row in non_review
+                if row["dev_state"] == "skipped"
+                or row["review_state"] == "skipped"
+                or row["git_state"] == "skipped"
+            ],
+        },
+        "git_pending": {
+            "count": sum(1 for row in non_review if row["git_state"] == "pending"),
+            "ids": [row["id"] for row in non_review if row["git_state"] == "pending"],
+        },
+        "review": {
+            "dev_state": review["dev_state"],
+            "review_state": review["review_state"],
+            "git_state": review["git_state"],
+        },
+        "evidence_refs": {
+            "count": tasks_with_evidence_refs,
+            "total": len(non_review),
+        },
+        "evidence_levels": evidence_level_counts,
+        "warnings": warnings,
+    }
+
+
+def format_summary(summary: dict[str, object]) -> str:
+    closed = summary["closed"]
+    todo_or_doing = summary["todo_or_doing"]
+    blocked = summary["blocked"]
+    failed = summary["failed"]
+    skipped = summary["skipped"]
+    git_pending = summary["git_pending"]
+    review = summary["review"]
+    evidence_refs = summary["evidence_refs"]
+    evidence_levels = summary["evidence_levels"]
+    warnings = summary["warnings"]
+
+    level_text = ", ".join(
+        f"{level}={count}" for level, count in sorted(evidence_levels.items())
+    )
+    lines = [
+        f"OK: {summary['rows_total']} rows",
+        f"closed: {closed['count']}/{summary['non_review_total']} non-review tasks",
+        f"todo_or_doing: {todo_or_doing['count']}",
+        f"blocked: {blocked['count']}",
+        f"failed: {failed['count']}",
+        f"skipped: {skipped['count']}",
+        f"git_pending: {git_pending['count']}",
+        f"review: {review['dev_state']}/{review['review_state']}/{review['git_state']}",
+        f"evidence_refs: {evidence_refs['count']}/{evidence_refs['total']} non-review tasks",
+        f"evidence_levels: {level_text}",
+        f"warnings: {len(warnings)}",
+    ]
+    for warning in warnings:
+        lines.append(
+            f"- {warning['code']}: {warning['task_id']} - {warning['message']}"
+        )
+    return "\n".join(lines)
+
+
+def command_summary(args: argparse.Namespace) -> int:
+    rows = validate_file(Path(args.csv_path))
+    summary = build_summary(rows)
+    if args.json:
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    else:
+        print(format_summary(summary))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Workline CSV helper")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -292,6 +479,11 @@ def build_parser() -> argparse.ArgumentParser:
     next_parser = subparsers.add_parser("next", help="print next runnable task as JSON")
     next_parser.add_argument("csv_path")
     next_parser.set_defaults(func=command_next)
+
+    summary_parser = subparsers.add_parser("summary", help="print task status and evidence summary")
+    summary_parser.add_argument("csv_path")
+    summary_parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
+    summary_parser.set_defaults(func=command_summary)
     return parser
 
 

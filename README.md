@@ -79,6 +79,18 @@ evidence/T012-board-check/
 
 `tasks.csv` 的 `refs` 字段可以同时引用 `prd.md`、`references/...` 和 `evidence/...`。
 
+执行证据应使用轻量标签标明证据等级。标签写在 `refs`、`notes` 或 `run.md` 中，不新增 CSV 字段，也不生成新的状态文件。推荐标签：
+
+| 标签 | 含义 |
+| --- | --- |
+| `[evidence:local-test]` | 本地自动化测试、构建、静态检查或 dry-run |
+| `[evidence:mock-mqtt]` | mock、仿真、模拟 MQTT/协议输入输出 |
+| `[evidence:board-smoke]` | 已上板或目标环境烟测，但未覆盖真实外设/真实 ACK |
+| `[evidence:real-device]` | 真实设备、真实通信服务、真实 ACK 或现场链路验证 |
+| `[evidence:manual-review]` | 人工检查、截图复核、HITL 操作确认 |
+
+同一任务可以有多个证据等级。证据等级只帮助复盘和审查，不替代 `tasks.csv` 状态字段。
+
 `reviews/` 由 `workline-review` 按需创建，用来放 Workline 自审、人工审查或其它 AI 审查结果。审查报告不是新的需求源；它只指出 `prd.md` 或 `tasks.csv` 是否需要回到上一个阶段修订。
 
 ## CSV 状态源
@@ -108,6 +120,30 @@ review_state = passed
 
 `REVIEW` 行必须是最后一行，且依赖所有非 `REVIEW` 任务。它检查 PRD 覆盖、CSV 状态、验证记录、`run.md` 证据、失败/跳过解释和提交状态结论，不能补做实现任务。
 
+## 复盘摘要
+
+`workline_csv.py summary` 用于快速复盘 `tasks.csv` 状态和证据质量。它只读取 `tasks.csv`，不写入文件，不成为新的状态源。
+
+```bash
+python workline-run/scripts/workline_csv.py summary .workline/active/<slug>/tasks.csv
+python workline-run/scripts/workline_csv.py summary .workline/active/<slug>/tasks.csv --json
+```
+
+默认输出给人阅读，`--json` 输出机器可读结果，方便 `$workline-review` 和 `$workline-archive` 复用。
+
+`summary` 的 warnings 是提醒型体检结果，不让命令因为 warning 失败。真正是否 `PASS`、`REVISE`、`BLOCKED`，仍由 `$workline-review` 和 `$workline-archive` 根据 PRD、`tasks.csv`、`run.md`、`reviews/` 和证据上下文判断。
+
+当前 warning 类型：
+
+| Warning | 触发条件 |
+| --- | --- |
+| `missing-evidence-ref` | 非 `REVIEW` 任务已 `done/passed`，但没有引用 `evidence/` |
+| `missing-evidence-level` | 引用了 `evidence/`，但没有 `[evidence:*]` 标签 |
+| `hitl-without-manual-or-board-evidence` | `mode=HITL` 的终态任务没有 `manual-review`、`board-smoke` 或 `real-device` 证据标签 |
+| `board-smoke-without-real-device` | 有 `board-smoke` 证据，但没有 `real-device` 证据 |
+| `git-pending` | 非 `REVIEW` 终态任务 `git_state=pending` |
+| `skipped-or-blocked` | 任务存在 `skipped`、`blocked` 或 `failed` 状态 |
+
 ## 模板和脚本
 
 每个 Skill 尽量自包含，不依赖顶层共享脚本目录：
@@ -118,7 +154,7 @@ review_state = passed
 | `workline-tasks/templates/tasks.csv` | `workline-tasks` | 生成 `tasks.csv` |
 | `workline-init/scripts/init_workline.py` | `workline-init` | 初始化活动目录 |
 | `workline-tasks/scripts/workline_csv.py` | `workline-tasks` | 任务拆分后校验 CSV |
-| `workline-run/scripts/workline_csv.py` | `workline-run` | 执行阶段校验、更新 CSV、定位下一任务 |
+| `workline-run/scripts/workline_csv.py` | `workline-run` | 执行阶段校验、更新 CSV、定位下一任务、生成复盘摘要 |
 
 两份 `workline_csv.py` 必须保持实现一致。修改其中一份时，直接同步另一份并分别运行校验。
 
