@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Validate and update Workline tasks.csv."""
+"""Validate and update Workline tasks.csv.
+
+同步副本：workline-tasks/scripts/ 与 workline-run/scripts/ 必须逐字一致。
+"""
 
 from __future__ import annotations
 
@@ -7,6 +10,7 @@ import argparse
 import csv
 import json
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -19,20 +23,21 @@ HEADERS = [
     "mode",
     "title",
     "description",
-    "acceptance_criteria",
     "verification",
-    "dev_state",
-    "verify_state",
-    "git_state",
+    "state",
+    "commit",
     "refs",
     "notes",
 ]
 
 MODES = {"AFK", "HITL"}
-DEV_STATES = {"todo", "doing", "done", "blocked", "skipped"}
-VERIFY_STATES = {"pending", "passed", "failed", "blocked", "skipped"}
-GIT_STATES = {"pending", "done", "blocked"}
-TERMINAL_DEV_STATES = {"done", "blocked", "skipped"}
+STATES = {"todo", "doing", "done", "failed", "blocked", "skipped"}
+OPEN_STATES = {"todo", "doing"}
+EXCEPTION_STATES = {"failed", "blocked", "skipped"}
+SATISFYING_STATES = {"done", "skipped"}
+
+RUN_SECTION_RE = re.compile(r"^##\s+(\S+)", re.MULTILINE)
+COMMIT_RE = re.compile(r"^[0-9a-fA-F]{7,64}$")
 
 
 class WorklineCsvError(Exception):
@@ -85,12 +90,39 @@ def split_deps(value: str) -> list[str]:
     return [item for item in value.split() if item]
 
 
-def is_closed(row: dict[str, str]) -> bool:
-    return row["dev_state"] == "done" and row["verify_state"] == "passed"
-
-
 def dep_satisfied(row: dict[str, str]) -> bool:
-    return is_closed(row) or row["dev_state"] == "skipped"
+    return row["state"] in SATISFYING_STATES
+
+
+def commit_valid(value: str) -> bool:
+    return value == "no-change" or bool(COMMIT_RE.fullmatch(value))
+
+
+def detect_cycle(rows: list[dict[str, str]]) -> list[str] | None:
+    graph = {row["id"]: split_deps(row["depends_on"]) for row in rows}
+    color: dict[str, int] = {key: 0 for key in graph}
+    stack: list[str] = []
+
+    def visit(node: str) -> list[str] | None:
+        color[node] = 1
+        stack.append(node)
+        for dep in graph.get(node, []):
+            if color.get(dep) == 1:
+                return stack[stack.index(dep):] + [dep]
+            if color.get(dep) == 0:
+                found = visit(dep)
+                if found:
+                    return found
+        stack.pop()
+        color[node] = 2
+        return None
+
+    for node in graph:
+        if color[node] == 0:
+            found = visit(node)
+            if found:
+                return found
+    return None
 
 
 def validate_rows(rows: list[dict[str, str]]) -> None:
@@ -110,31 +142,24 @@ def validate_rows(rows: list[dict[str, str]]) -> None:
 
         if row["mode"] not in MODES:
             raise WorklineCsvError(f"{task_id}: invalid mode {row['mode']!r}")
-        if row["dev_state"] not in DEV_STATES:
-            raise WorklineCsvError(f"{task_id}: invalid dev_state {row['dev_state']!r}")
-        if row["verify_state"] not in VERIFY_STATES:
+        if row["state"] not in STATES:
+            raise WorklineCsvError(f"{task_id}: invalid state {row['state']!r}")
+        if row["commit"] and not commit_valid(row["commit"]):
             raise WorklineCsvError(
-                f"{task_id}: invalid verify_state {row['verify_state']!r}"
+                f"{task_id}: invalid commit {row['commit']!r}; "
+                "expected no-change or a 7-64 character hexadecimal hash"
             )
-        if row["git_state"] not in GIT_STATES:
-            raise WorklineCsvError(f"{task_id}: invalid git_state {row['git_state']!r}")
-
-        if task_id != "REVIEW":
-            if not row["acceptance_criteria"]:
-                raise WorklineCsvError(f"{task_id}: acceptance_criteria is required")
-            if not row["verification"]:
-                raise WorklineCsvError(f"{task_id}: verification is required")
-        if row["verify_state"] == "passed" and row["dev_state"] != "done":
-            raise WorklineCsvError(f"{task_id}: verify_state=passed requires dev_state=done")
-        if row["dev_state"] == "done" and row["verify_state"] in {"failed", "blocked"}:
-            raise WorklineCsvError(
-                f"{task_id}: dev_state=done conflicts with verify_state={row['verify_state']}"
-            )
+        if task_id != "REVIEW" and not row["verification"]:
+            raise WorklineCsvError(f"{task_id}: verification is required")
 
     if ids[-1] != "REVIEW":
         raise WorklineCsvError("last row must be REVIEW")
     if ids.count("REVIEW") != 1:
         raise WorklineCsvError("REVIEW must appear exactly once")
+    if rows[-1]["depends_on"]:
+        raise WorklineCsvError(
+            "REVIEW depends_on must be empty; REVIEW implicitly depends on every task"
+        )
 
     id_set = set(ids)
     for row in rows:
@@ -144,21 +169,74 @@ def validate_rows(rows: list[dict[str, str]]) -> None:
                 raise WorklineCsvError(f"{task_id}: unknown dependency {dep}")
             if dep == task_id:
                 raise WorklineCsvError(f"{task_id}: cannot depend on itself")
+            if task_id != "REVIEW" and dep == "REVIEW":
+                raise WorklineCsvError(
+                    f"{task_id}: cannot depend on REVIEW; "
+                    "REVIEW implicitly depends on every non-REVIEW task"
+                )
 
-    non_review_ids = ids[:-1]
-    review_deps = set(split_deps(rows[-1]["depends_on"]))
-    if review_deps != set(non_review_ids):
-        missing = sorted(set(non_review_ids) - review_deps)
-        extra = sorted(review_deps - set(non_review_ids))
-        raise WorklineCsvError(
-            f"REVIEW must depend on all non-REVIEW tasks; missing={missing}, extra={extra}"
-        )
+    cycle = detect_cycle(rows)
+    if cycle:
+        raise WorklineCsvError("dependency cycle: " + " -> ".join(cycle))
 
 
 def validate_file(path: Path) -> list[dict[str, str]]:
     rows = read_rows(path)
     validate_rows(rows)
     return rows
+
+
+def read_run_sections(csv_path: Path) -> set[str] | None:
+    run_path = csv_path.parent / "run.md"
+    try:
+        text = run_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        raise WorklineCsvError(f"cannot read run.md: {exc}") from exc
+    return set(RUN_SECTION_RE.findall(text))
+
+
+def build_warnings(rows: list[dict[str, str]], csv_path: Path) -> list[dict[str, str]]:
+    warnings: list[dict[str, str]] = []
+    sections = read_run_sections(csv_path)
+
+    for row in rows:
+        task_id = row["id"]
+        if row["state"] == "done":
+            if not row["commit"]:
+                warnings.append(
+                    {
+                        "code": "commit-missing",
+                        "task_id": task_id,
+                        "message": "state=done 但 commit 为空，提交收口未完成",
+                    }
+                )
+            if sections is None:
+                warnings.append(
+                    {
+                        "code": "run-log-missing",
+                        "task_id": task_id,
+                        "message": "state=done 但 run.md 不存在",
+                    }
+                )
+            elif task_id not in sections:
+                warnings.append(
+                    {
+                        "code": "run-log-missing",
+                        "task_id": task_id,
+                        "message": f"state=done 但 run.md 中没有 ## {task_id} 小节",
+                    }
+                )
+        if row["state"] in EXCEPTION_STATES:
+            warnings.append(
+                {
+                    "code": "exception-state",
+                    "task_id": task_id,
+                    "message": f"state={row['state']}；notes: {row['notes'] or '无说明'}",
+                }
+            )
+    return warnings
 
 
 def find_row(rows: list[dict[str, str]], task_id: str) -> dict[str, str]:
@@ -168,42 +246,40 @@ def find_row(rows: list[dict[str, str]], task_id: str) -> dict[str, str]:
     raise WorklineCsvError(f"unknown task id: {task_id}")
 
 
-def require_note_for_exception(row: dict[str, str], updates: dict[str, str]) -> None:
-    effective_notes = updates.get("notes", row["notes"])
-    exception_values = {
-        updates.get("dev_state", row["dev_state"]),
-        updates.get("verify_state", row["verify_state"]),
-        updates.get("git_state", row["git_state"]),
-    }
-    if exception_values & {"blocked", "skipped", "failed"} and not effective_notes.strip():
-        raise WorklineCsvError("blocked/skipped/failed updates require notes")
-
-
 def validate_transition(row: dict[str, str], updates: dict[str, str]) -> None:
-    for key, allowed in {
-        "dev_state": DEV_STATES,
-        "verify_state": VERIFY_STATES,
-        "git_state": GIT_STATES,
-    }.items():
-        if key in updates and updates[key] not in allowed:
-            raise WorklineCsvError(f"invalid {key}: {updates[key]}")
+    new_state = updates.get("state", row["state"])
+    if new_state not in STATES:
+        raise WorklineCsvError(f"invalid state: {new_state}")
+    if row["state"] == "todo" and new_state == "done":
+        raise WorklineCsvError("cannot change state directly from todo to done; set doing first")
 
-    old_dev = row["dev_state"]
-    new_dev = updates.get("dev_state", old_dev)
-    new_verify = updates.get("verify_state", row["verify_state"])
+    effective_notes = updates.get("notes", row["notes"])
+    if new_state in EXCEPTION_STATES and not effective_notes.strip():
+        raise WorklineCsvError(f"state={new_state} requires notes")
 
-    if old_dev == "todo" and new_dev == "done":
-        raise WorklineCsvError("cannot change dev_state directly from todo to done; set doing first")
-    if new_verify == "passed" and new_dev != "done":
-        raise WorklineCsvError("verify_state=passed requires dev_state=done")
-    if new_dev == "done" and new_verify in {"failed", "blocked"}:
-        raise WorklineCsvError(f"dev_state=done conflicts with verify_state={new_verify}")
-    require_note_for_exception(row, updates)
+
+def on_complete_steps(row: dict[str, str]) -> list[str]:
+    task_id = row["id"]
+    if task_id == "REVIEW":
+        return [
+            "逐项核对 REVIEW 检查清单",
+            "最终结论写入 run.md 的 ## REVIEW 一节",
+            "set <tasks.csv> REVIEW --state done --commit no-change",
+        ]
+    return [
+        "按 verification 执行验证，记录真实命令与真实输出",
+        f"在 run.md 追加 ## {task_id} 一节",
+        f"set <tasks.csv> {task_id} --state done --commit <hash|no-change>",
+    ]
 
 
 def command_validate(args: argparse.Namespace) -> int:
-    rows = validate_file(Path(args.csv_path))
-    print(f"OK: {len(rows)} rows")
+    path = Path(args.csv_path)
+    rows = validate_file(path)
+    warnings = build_warnings(rows, path)
+    print(f"OK: {len(rows)} rows, {len(warnings)} warnings")
+    for warning in warnings:
+        print(f"- {warning['code']}: {warning['task_id']} - {warning['message']}")
     return 0
 
 
@@ -213,7 +289,7 @@ def command_set(args: argparse.Namespace) -> int:
     row = find_row(rows, args.task_id)
 
     updates: dict[str, str] = {}
-    for key in ("dev_state", "verify_state", "git_state", "refs", "notes"):
+    for key in ("state", "commit", "refs", "notes"):
         value = getattr(args, key)
         if value is not None:
             updates[key] = value
@@ -233,151 +309,67 @@ def command_set(args: argparse.Namespace) -> int:
     validate_rows(rows)
     write_rows_atomic(path, rows)
     print(f"OK: updated {args.task_id}")
+    for warning in build_warnings(rows, path):
+        print(f"- {warning['code']}: {warning['task_id']} - {warning['message']}")
     return 0
 
 
 def command_next(args: argparse.Namespace) -> int:
-    rows = validate_file(Path(args.csv_path))
+    path = Path(args.csv_path)
+    rows = validate_file(path)
+    warnings = build_warnings(rows, path)
     by_id = {row["id"]: row for row in rows}
+    non_review = rows[:-1]
+    review = rows[-1]
 
-    for row in rows:
-        if row["id"] == "REVIEW":
-            non_review = rows[:-1]
-            ready = all(dep_satisfied(item) for item in non_review)
-            if ready and row["dev_state"] in {"todo", "doing"}:
-                print(json.dumps(row, ensure_ascii=False))
-                return 0
-            continue
-
-        if row["dev_state"] not in {"todo", "doing"}:
-            continue
-        deps = [by_id[dep] for dep in split_deps(row["depends_on"])]
-        if all(dep_satisfied(dep) for dep in deps):
-            print(json.dumps(row, ensure_ascii=False))
-            return 0
-
-    blocked = [
-        row["id"]
-        for row in rows
-        if row["dev_state"] in {"todo", "doing"}
-        and any(by_id[dep]["dev_state"] == "blocked" for dep in split_deps(row["depends_on"]))
-    ]
-    if blocked:
-        print(json.dumps({"next": None, "blocked": blocked}, ensure_ascii=False))
-    else:
-        print(json.dumps({"next": None}, ensure_ascii=False))
-    return 0
-
-
-def build_summary(rows: list[dict[str, str]]) -> dict[str, object]:
-    non_review = [row for row in rows if row["id"] != "REVIEW"]
-    final_review = find_row(rows, "REVIEW")
-    warnings: list[dict[str, str]] = []
-
+    selected: dict[str, str] | None = None
     for row in non_review:
-        task_id = row["id"]
-        if row["git_state"] == "pending" and row["dev_state"] in TERMINAL_DEV_STATES:
-            warnings.append(
-                {
-                    "code": "git-pending",
-                    "task_id": task_id,
-                    "message": "git_state is still pending",
-                }
-            )
-        if (
-            row["dev_state"] in {"blocked", "skipped"}
-            or row["verify_state"] in {"failed", "blocked", "skipped"}
-            or row["git_state"] == "blocked"
-        ):
-            warnings.append(
-                {
-                    "code": "skipped-or-blocked",
-                    "task_id": task_id,
-                    "message": "task contains skipped, blocked, or failed state",
-                }
-            )
+        if row["state"] not in OPEN_STATES:
+            continue
+        if all(dep_satisfied(by_id[dep]) for dep in split_deps(row["depends_on"])):
+            selected = row
+            break
 
-    return {
-        "rows_total": len(rows),
-        "non_review_total": len(non_review),
-        "closed": {
-            "count": sum(1 for row in non_review if is_closed(row)),
-            "ids": [row["id"] for row in non_review if is_closed(row)],
-        },
-        "todo_or_doing": {
-            "count": sum(1 for row in non_review if row["dev_state"] in {"todo", "doing"}),
-            "ids": [row["id"] for row in non_review if row["dev_state"] in {"todo", "doing"}],
-        },
-        "blocked": {
-            "count": sum(1 for row in non_review if row["dev_state"] == "blocked"),
-            "ids": [row["id"] for row in non_review if row["dev_state"] == "blocked"],
-        },
-        "failed": {
-            "count": sum(1 for row in non_review if row["verify_state"] == "failed"),
-            "ids": [row["id"] for row in non_review if row["verify_state"] == "failed"],
-        },
-        "skipped": {
-            "count": sum(
-                1
-                for row in non_review
-                if row["dev_state"] == "skipped"
-                or row["verify_state"] == "skipped"
-            ),
-            "ids": [
-                row["id"]
-                for row in non_review
-                if row["dev_state"] == "skipped"
-                or row["verify_state"] == "skipped"
-            ],
-        },
-        "git_pending": {
-            "count": sum(1 for row in non_review if row["git_state"] == "pending"),
-            "ids": [row["id"] for row in non_review if row["git_state"] == "pending"],
-        },
-        "final_review": {
-            "dev_state": final_review["dev_state"],
-            "verify_state": final_review["verify_state"],
-            "git_state": final_review["git_state"],
-        },
-        "warnings": warnings,
-    }
+    if selected is None and review["state"] in OPEN_STATES:
+        if all(dep_satisfied(row) for row in non_review):
+            selected = review
 
+    if selected is not None:
+        payload = dict(selected)
+        payload["on_complete"] = on_complete_steps(selected)
+        payload["warnings"] = warnings
+        print(json.dumps(payload, ensure_ascii=False))
+        return 0
 
-def format_summary(summary: dict[str, object]) -> str:
-    closed = summary["closed"]
-    todo_or_doing = summary["todo_or_doing"]
-    blocked = summary["blocked"]
-    failed = summary["failed"]
-    skipped = summary["skipped"]
-    git_pending = summary["git_pending"]
-    final_review = summary["final_review"]
-    warnings = summary["warnings"]
-
-    lines = [
-        f"OK: {summary['rows_total']} rows",
-        f"closed: {closed['count']}/{summary['non_review_total']} non-review tasks",
-        f"todo_or_doing: {todo_or_doing['count']}",
-        f"blocked: {blocked['count']}",
-        f"failed: {failed['count']}",
-        f"skipped: {skipped['count']}",
-        f"git_pending: {git_pending['count']}",
-        f"final_review: {final_review['dev_state']}/{final_review['verify_state']}/{final_review['git_state']}",
-        f"warnings: {len(warnings)}",
-    ]
-    for warning in warnings:
-        lines.append(
-            f"- {warning['code']}: {warning['task_id']} - {warning['message']}"
-        )
-    return "\n".join(lines)
-
-
-def command_summary(args: argparse.Namespace) -> int:
-    rows = validate_file(Path(args.csv_path))
-    summary = build_summary(rows)
-    if args.json:
-        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    unfinished = [row for row in non_review if not dep_satisfied(row)]
+    if unfinished:
+        detail: dict[str, str] = {}
+        for row in unfinished:
+            if row["state"] in {"failed", "blocked"}:
+                detail[row["id"]] = f"state={row['state']}；{row['notes'] or '无说明'}"
+            else:
+                unmet = [
+                    f"{dep}={by_id[dep]['state']}"
+                    for dep in split_deps(row["depends_on"])
+                    if not dep_satisfied(by_id[dep])
+                ]
+                detail[row["id"]] = f"state={row['state']}，未满足依赖：{' '.join(unmet) or '无'}"
+        reason = "needs-attention"
+    elif review["state"] == "done":
+        detail = {}
+        reason = "all-closed"
     else:
-        print(format_summary(summary))
+        detail = {
+            "REVIEW": f"state={review['state']}；{review['notes'] or '无说明'}"
+        }
+        reason = "needs-attention"
+
+    print(
+        json.dumps(
+            {"next": None, "reason": reason, "detail": detail, "warnings": warnings},
+            ensure_ascii=False,
+        )
+    )
     return 0
 
 
@@ -392,9 +384,8 @@ def build_parser() -> argparse.ArgumentParser:
     set_parser = subparsers.add_parser("set", help="update one task row")
     set_parser.add_argument("csv_path")
     set_parser.add_argument("task_id")
-    set_parser.add_argument("--dev_state")
-    set_parser.add_argument("--verify_state")
-    set_parser.add_argument("--git_state")
+    set_parser.add_argument("--state")
+    set_parser.add_argument("--commit")
     set_parser.add_argument("--refs")
     set_parser.add_argument("--append-refs")
     set_parser.add_argument("--notes")
@@ -404,11 +395,6 @@ def build_parser() -> argparse.ArgumentParser:
     next_parser = subparsers.add_parser("next", help="print next runnable task as JSON")
     next_parser.add_argument("csv_path")
     next_parser.set_defaults(func=command_next)
-
-    summary_parser = subparsers.add_parser("summary", help="print optional task status summary")
-    summary_parser.add_argument("csv_path")
-    summary_parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
-    summary_parser.set_defaults(func=command_summary)
     return parser
 
 
@@ -424,8 +410,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-
-
-
-

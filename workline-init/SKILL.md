@@ -9,6 +9,10 @@ description: "初始化 Workline 长任务过程目录。Use when the user wants
 
 创建一个新的 Workline 活动目录，让用户先有稳定材料入口，再进入需求澄清。
 
+## 路径约定
+
+`<SKILL_DIR>` 指本 SKILL.md 所在目录的绝对路径。运行环境未提供该变量时，先定位本文件的实际路径再替换。所有命令都在项目根目录下执行。
+
 ## 输入
 
 - 用户的粗略需求文本。
@@ -18,7 +22,7 @@ description: "初始化 Workline 长任务过程目录。Use when the user wants
 ## 步骤
 
 1. 定位项目根目录。
-2. 运行 `scripts/init_workline.py` 创建 `.workline/active/<YYYY-MM-DD-HHMM-slug>/`。
+2. 运行初始化脚本创建 `.workline/active/<YYYY-MM-DD-HHMM-slug>/`。
 3. 确认新目录包含：
    - `brief.md`
    - `references/`
@@ -27,13 +31,14 @@ description: "初始化 Workline 长任务过程目录。Use when the user wants
 示例：
 
 ```bash
-python workline-init/scripts/init_workline.py --root . --brief "为现有工具增加批量导入流程"
-python workline-init/scripts/init_workline.py --root . --slug bulk-import --brief "为现有工具增加批量导入流程"
+python <SKILL_DIR>/scripts/init_workline.py --root . --brief "为现有工具增加批量导入流程"
+python <SKILL_DIR>/scripts/init_workline.py --root . --slug bulk-import --brief "为现有工具增加批量导入流程"
 ```
 
 ## 硬约束
 
 - 目标目录已存在时停止并报告。
+- 脚本不可用时停止并报告实际路径问题，不得改用手工建目录绕过。
 
 ## 输出
 
@@ -42,5 +47,5 @@ python workline-init/scripts/init_workline.py --root . --slug bulk-import --brie
 - 新建活动目录路径。
 - `brief.md` 已创建为基础模板，创建时间已填充。
 - `references/` 已创建为空目录。
-- 请按 `brief.md` 模板手动填写内容，并把参考资料放入 `references/`。
+- 请按 `brief.md` 模板手动填写原始粗需求，并把参考资料放入 `references/`，同时在“已放入 references/ 的材料及用途”表中登记每份材料的用途。
 - 下一步再使用 `$workline-grill`。
