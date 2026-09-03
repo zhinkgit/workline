@@ -44,10 +44,10 @@ python <SKILL_DIR>/scripts/workline_csv.py require-gates .workline/active/<slug>
 | --- | --- |
 | `id` | 任务 ID，必须是 `T` 加至少三位数字，如 `T001`；末行固定为 `REVIEW` |
 | `depends_on` | 依赖任务 ID，多个用空格分隔；普通任务不得依赖 `REVIEW`，`REVIEW` 行留空 |
-| `mode` | `AFK` 可自动执行；`HITL` 需要人工、实机、账号或关键确认 |
+| `mode` | `AFK` 可无人值守；`HITL` 需要人判断、人手操作或账号确认。编译器、探针、串口等若能自行给出通过/失败，仍标 AFK |
 | `title` | 简短任务标题，必填 |
-| `description` | 任务范围和实现说明；验证命令覆盖不到的完成标准也写这里 |
-| `verification` | 验证手段 + 期望结果；AFK 任务的命令必须用反引号包裹 |
+| `description` | 任务范围和实现说明；验证手段覆盖不到的完成标准也写这里 |
+| `verification` | 验证手段 + 期望结果。手段可以是命令行、Skill 或其他工具，见下节 |
 | `state` | `todo`、`doing`、`done`、`blocked`、`skipped` |
 | `commit` | 7–64 位十六进制提交哈希 / `no-change` / 留空 |
 | `refs` | 本任务的材料加载清单，见下节 |
@@ -85,21 +85,27 @@ FR-2 NFR-1 references/import-format.md
 
 `refs` 为空会产生 `refs-missing` warning。确实不需要任何材料的任务，用 `--allow-empty-refs` 豁免校验。
 
-## verification 的强度
+## verification 写什么
 
-`mode=AFK` 意味着无人值守，它的验证必须机器可判定。校验器只把**反引号包裹的命令**当成可执行痕迹，没有就输出 `verification-weak`。
+`verification` 描述「用什么手段、怎样算过」。不要另加工具列。手段可以是命令行、已安装的 Agent Skill，或其他能给出通过/失败的工具。反引号只是可选排版，校验器不要求。
 
-看到这个 warning 时二选一，不要放着不管：
+| `mode` | 何时使用 | `verification` 怎么写 |
+| --- | --- | --- |
+| `AFK` | 执行时不等人，判定能由命令、Skill 或其他工具自己给出 | 写清调用什么、期望什么。例如：`pytest tests/test_import.py` 退出码 0；keil build 成功且 errors=0；jlink flash 成功，且 jlink rtt 在 3s 内出现 boot ok |
+| `HITL` | 判定权在人，或必须人选 / 人手操作 | 写清人看什么、怎样算过。例如：打开导入页上传 samples/bad.csv，人确认错误报告可读 |
 
-- 补上真实可执行命令，命令用反引号包裹。
-- 承认这条任务需要人判断，改为 `mode=HITL`，并写清人工检查方式和判定标准。
+拆表时按判定权选模式，不要因为「不是 shell 命令」或「会碰到板子」就改成 HITL：
+
+- 工具能自行判定 → `AFK`。点名 Skill 时写 skill 名和期望结果，执行阶段会去加载该 Skill。
+- 必须人看、人选、人确认 → `HITL`。例如界面是否可读、多工程时 Skill 规定不得自动猜测。
+- 工具或环境不具备（没装 Skill、没探针、编译器不在）→ 执行时标 `blocked`，不是改成 HITL 等人来补环境。
 
 ## CSV 生成
 
 使用 `templates/tasks.csv` 的固定表头。写 CSV 时使用标准 CSV 转义。执行中途新增任务不要手改 CSV，用：
 
 ```bash
-python <SKILL_DIR>/scripts/workline_csv.py add .workline/active/<slug>/tasks.csv T012 --mode AFK --title "补校验" --description "..." --verification "`pytest`" --refs "FR-2"
+python <SKILL_DIR>/scripts/workline_csv.py add .workline/active/<slug>/tasks.csv T012 --mode AFK --title "补校验" --description "..." --verification "pytest tests/test_import.py 退出码 0" --refs "FR-2"
 ```
 
 生成后运行：
@@ -118,7 +124,6 @@ python <SKILL_DIR>/scripts/workline_csv.py validate .workline/active/<slug>/task
 | `fr-uncovered` / `nfr-uncovered` | 漏拆，补任务或说明为什么不需要 |
 | `refs-missing` | 补加载清单，或确认无需材料后用 `--allow-empty-refs` |
 | `refs-invalid` / `refs-not-found` / `req-id-padded` | 改正 refs |
-| `verification-weak` | 补反引号命令，或改为 `mode=HITL` |
 | `skipped-unblocks` | 确认后继仍可执行 |
 
 ## REVIEW 行
@@ -129,7 +134,7 @@ python <SKILL_DIR>/scripts/workline_csv.py validate .workline/active/<slug>/task
 
 ## 交付前自检
 
-交付 `tasks.csv` 前逐条核对，把结论写进输出。核对范围与 `$workline-review` 的任务审查清单相同：任务是否足够小、能否追溯到 PRD、AFK/HITL 是否标对、验证是否可判定、refs 是否合法、依赖是否真实。
+交付 `tasks.csv` 前逐条核对，把结论写进输出。核对范围与 `$workline-review` 的任务审查清单相同：任务是否足够小、能否追溯到 PRD、AFK/HITL 是否按判定权标对、验证是否写清手段和期望结果、refs 是否合法、依赖是否真实。不要因为没有反引号就把 AFK 改成 HITL。
 
 本 Skill 做完自检仍不能进入执行。下一步是必审。
 

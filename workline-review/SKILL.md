@@ -93,12 +93,12 @@ python <SKILL_DIR>/scripts/workline_csv.py validate .workline/active/<slug>/task
 
 检查：
 
-- 校验是否通过；`fr-headings-missing`、`fr-uncovered`、`nfr-uncovered`、`refs-invalid`、`refs-not-found`、`req-id-padded`、`verification-weak`、`refs-missing` 是否都已处理或有合理解释。
+- 校验是否通过；`fr-headings-missing`、`fr-uncovered`、`nfr-uncovered`、`refs-invalid`、`refs-not-found`、`req-id-padded`、`refs-missing` 是否都已处理或有合理解释。
 - 每条非 `REVIEW` 任务是否足够小、可单独实现、可单独验证。
 - 每条任务是否能追溯到 `prd.md` 的功能要求、非功能要求或验收标准。
 - 是否把 PRD 中未闭环的待确认问题伪装成可执行任务。
-- `mode=AFK/HITL` 是否合理；`next` 会优先调度独立 AFK，HITL 仍须标对。
-- `verification` 是否写清验证手段和期望结果；AFK 任务的命令必须用反引号包裹。
+- `mode=AFK/HITL` 是否按判定权标对：命令、Skill 或其他工具能自行给出通过/失败的标 `AFK`；必须人看、人选或人手操作的标 `HITL`。碰到板子本身不是改成 HITL 的理由。`next` 会优先调度独立 AFK，HITL 仍须标对。
+- `verification` 是否写清验证手段和期望结果。手段可以是命令行、Skill 或其他工具，不要求反引号。AFK 的判定必须在无人值守下可完成；写「验证一下」这类无法判定的句子则 `REVISE`。
 - `refs` 是否只含 `FR-` / `NFR-` 编号、`references/` 或 `evidence/` 路径。
 - 依赖关系是否反映真实实现顺序。
 - `REVIEW` 行是否最后一行且 `depends_on` 为空。

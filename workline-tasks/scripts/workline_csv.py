@@ -65,7 +65,6 @@ REQ_REF_RE = re.compile(r"\b(?:FR|NFR)-[1-9]\d*\b")
 PADDED_REQ_REF_RE = re.compile(r"\b(?:FR|NFR)-0\d+\b")
 FUNCTION_HEADING_RE = re.compile(r"^##\s+功能要求\s*$", re.MULTILINE)
 NEXT_H2_RE = re.compile(r"^##\s+", re.MULTILINE)
-COMMAND_HINT_RE = re.compile(r"`[^`]+`")
 REF_TOKEN_RE = re.compile(r"^(?:(?:FR|NFR)-[1-9]\d*|references/\S+|evidence/\S+)$")
 TASK_ID_RE = re.compile(r"^T\d{3,}$")
 BLOCKING_WARNING_CODES = {
@@ -765,21 +764,6 @@ def build_warnings(
                 )
         if task_id == "REVIEW":
             continue
-        if (
-            row["mode"] == "AFK"
-            and row["verification"]
-            and not COMMAND_HINT_RE.search(row["verification"])
-        ):
-            warnings.append(
-                {
-                    "code": "verification-weak",
-                    "task_id": task_id,
-                    "message": (
-                        "mode=AFK 但 verification 中没有用反引号包裹的命令；"
-                        "无人值守任务的验证必须机器可判定，否则应改为 HITL"
-                    ),
-                }
-            )
         refs = split_refs(row["refs"])
         if not allow_empty_refs and not refs:
             warnings.append(

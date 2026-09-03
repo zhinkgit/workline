@@ -260,26 +260,19 @@ class WorklineCsvTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("title is required", err)
 
-    def test_verification_weak_requires_backticks(self) -> None:
+    def test_afk_without_backticks_is_valid(self) -> None:
         write_csv(
             self.csv_path,
             [
                 task(
                     id="T001",
-                    verification="检查 python 代码逻辑是否正确 make sure",
+                    verification="keil build 成功且 errors=0",
                 ),
                 REVIEW,
             ],
         )
-        code, out, _ = self.run_cmd(["validate", str(self.csv_path)])
-        self.assertEqual(code, 0)
-        self.assertIn("verification-weak", out)
-
-        write_csv(
-            self.csv_path,
-            [task(id="T001", verification="`pytest tests/test_import.py` 期望退出码 0"), REVIEW],
-        )
-        _, out, _ = self.run_cmd(["validate", str(self.csv_path)])
+        code, out, err = self.run_cmd(["validate", str(self.csv_path)])
+        self.assertEqual(code, 0, err)
         self.assertNotIn("verification-weak", out)
 
     def test_refs_invalid_and_fr_padding(self) -> None:

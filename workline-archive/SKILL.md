@@ -38,7 +38,7 @@ python <SKILL_DIR>/scripts/workline_csv.py archive-check .workline/active/<slug>
 7. PRD 和任务计划与门禁中保存的产物摘要一致。
 8. `references/` / `evidence/` 的引用合法且实际存在；`REVIEW` 行不能代替普通任务覆盖 FR/NFR。
 
-`verification-weak`、`refs-missing`、`skipped-unblocks` 不阻止归档，但要在输出中列出。`refs-invalid`、`refs-not-found`、`req-id-padded` 会阻止归档。
+`refs-missing`、`skipped-unblocks` 不阻止归档，但要在输出中列出。`refs-invalid`、`refs-not-found`、`req-id-padded` 会阻止归档。
 
 ## 知识沉淀
 

@@ -83,7 +83,6 @@ python <SKILL_DIR>/scripts/workline_csv.py gates-set <active-dir> --gate execute
    | --- | --- | --- |
    | `exception-state` | 存在 `blocked` / `skipped` 任务 | 按 `notes` 判断能否继续 |
    | `skipped-unblocks` | 后继依赖被跳过的任务 | 确认不是空地基施工 |
-   | `verification-weak` | AFK 任务的验证没有反引号命令 | 补命令或改 `HITL` |
    | `refs-missing` / `refs-invalid` / `refs-not-found` | 材料清单有问题 | 补或改正 `refs` |
    | `fr-uncovered` / `nfr-uncovered` / `fr-headings-missing` | 需求覆盖缺口 | 可能漏拆，报告用户 |
    | `worktree-dirty` | 工作区有非 `.workline` 的脏文件 | 任务级提交不要把它们捎上 |
@@ -121,7 +120,9 @@ python <SKILL_DIR>/scripts/workline_csv.py set <tasks.csv> T001 --state doing
 
 ### 处理 HITL
 
-`hitl=true` 或 `mode=HITL` 时，先请求用户参与。人工确认、实机操作和外部 ACK 只记录已经真实发生的结果。本轮等不到人，就标 `blocked`，让无依赖的 AFK 任务继续。
+`hitl=true` 或 `mode=HITL` 时，先请求用户参与。人工确认、人手操作和外部 ACK 只记录已经真实发生的结果。本轮等不到人，就标 `blocked`，让无依赖的 AFK 任务继续。
+
+AFK 任务即使涉及编译器、探针、串口，也按 `verification` 直接调用对应命令或 Skill，不要改去等人。工具或环境不具备则 `blocked`。
 
 ### 实现
 
@@ -129,7 +130,13 @@ python <SKILL_DIR>/scripts/workline_csv.py set <tasks.csv> T001 --state doing
 
 ### 验证
 
-实现后按 `verification` 验证。记录必须包含：执行过的命令或人工检查、真实输出摘要、失败原因或未覆盖范围。
+实现后按 `verification` 验证。它写的是手段和期望结果，不是必须包反引号的 shell 命令。
+
+- 点名了命令行或其他可执行工具：执行它，对照期望退出码或输出。
+- 点名了 Skill（如 keil、jlink、serial）：先读取该 Skill 的 `SKILL.md`，按其流程操作，用结构化结果对照期望。未安装或缺环境则 `blocked`，写清原因。
+- `HITL`：只记录已经真实发生的人工检查。
+
+记录必须包含：实际调用的命令/Skill/人工检查、真实输出摘要、失败原因或未覆盖范围。不要因为没有反引号就拒绝 AFK。
 
 ### 范围纪律自检
 
@@ -193,7 +200,7 @@ python <SKILL_DIR>/scripts/workline_csv.py set <tasks.csv> T001 --state done --c
 2. 用户确认后用 `add` 插入，不要手改 CSV：
 
 ```bash
-python <SKILL_DIR>/scripts/workline_csv.py add <tasks.csv> T012 --mode AFK --title "..." --description "..." --verification "`pytest`" --refs "FR-2"
+python <SKILL_DIR>/scripts/workline_csv.py add <tasks.csv> T012 --mode AFK --title "..." --description "..." --verification "pytest tests/test_import.py 退出码 0" --refs "FR-2"
 ```
 
 3. `add` 会自动把 `REVIEW` 退回 `todo`，并重置 `tasks-review` 和 `execute`。

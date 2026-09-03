@@ -30,7 +30,7 @@
 
 ### 3. 根据方案分解步骤，让每一步可测试、可执行
 
-方案通过后拆成 `tasks.csv`。每一步要能单独实现、单独验证、单独记状态；无人值守的步骤必须带机器可判定的验证命令。
+方案通过后拆成 `tasks.csv`。每一步要能单独实现、单独验证、单独记状态；无人值守的步骤必须写清机器可判定的验证手段和期望结果，手段可以是命令行、Skill 或其他工具。
 
 进度以 CSV 为准，不记在对话里。中断后读活动目录就能恢复。做完一步再做下一步，不把整份方案一次性闷头写完再指望最后一起验。
 
@@ -79,6 +79,61 @@ flowchart TD
 ```
 
 门禁写在 `run.md`（物料确认 → 方案审查 → 步骤审查 → 执行确认）。下一阶段只认这张表。`tasks.csv` 是执行期唯一状态源；`refs` 指向方案条款和物料，不写源码路径。校验由各 Skill 自带的 `workline_csv.py` 完成，调不到脚本就停止。
+
+### `tasks.csv` 组成
+
+固定 10 列，最后一行必须是 `REVIEW`（终审，不写代码，隐式依赖全部任务）。
+
+| 列 | 作用 |
+| --- | --- |
+| `id` | `T001` 这类编号；末行固定 `REVIEW` |
+| `depends_on` | 先完成哪些任务，空格分隔；`REVIEW` 留空 |
+| `mode` | `AFK` 无人值守；`HITL` 需要人判断或人手操作 |
+| `title` / `description` | 短标题，以及范围和做法 |
+| `verification` | 用什么手段、怎样算过。可以是命令行、Skill 或其他工具 |
+| `state` | `todo` → `doing` → `done`；条件不够则 `blocked`，确认跳过则 `skipped` |
+| `commit` | 本步业务提交的哈希，无改动写 `no-change` |
+| `refs` | 执行时加载的材料：`FR-2`、`references/`、`evidence/`，不写源码路径 |
+| `notes` | 阻塞、跳过、commit 为空等短备注 |
+
+前 6 列是计划，审查通过后不要改；后 4 列是执行状态。中途加任务用脚本的 `add`，不要手改表头。
+
+### 实际运行路径
+
+活动目录建好之后，按文件往下走，不要跳门：
+
+```text
+.workline/active/<slug>/
+    brief.md + references/     你放入物料
+            │
+            ▼  $workline-grill
+        prd.md                 澄清后的执行方案
+            │
+            ▼  $workline-review（审 PRD）
+        tasks.csv              $workline-tasks 按 PRD 拆表
+            │
+            ▼  $workline-review（审任务）
+        你确认执行             run.md 里 execute=CONFIRMED
+            │
+            ▼  $workline-run 循环：
+               校验门禁 → next 取下一任务（优先 AFK）
+               → 按 refs 加载材料
+               → set doing → 实现 → 按 verification 验证
+               → 写 run.md → 提交业务改动（不含 .workline/）
+               → set done
+               → 全部闭环后跑 REVIEW 行
+            │
+            ▼  $workline-archive
+        notes/ + archive/      沉淀可复用结论，搬走活动目录
+```
+
+推荐这样唤起执行，路径指向那份 CSV：
+
+```text
+按 $workline-run 执行 .workline/active/<slug>/tasks.csv
+```
+
+中断后用同一条命令恢复：状态在 CSV 里，不在对话里。验证失败保持 `doing` 或标 `blocked`；没装点名的 Skill、没探针、编译器不在，也是 `blocked`，不是改成等人。
 
 ---
 
