@@ -16,9 +16,15 @@ Workline 是一套独立、轻量、可审计的长任务工作流。它把一�
 ```text
 workline/
 ├── README.md
-├── tools/
-│   ├── check_script_sync.py
-│   └── test_workline_csv.py
+├── .github/
+│   ├── workflows/
+│   │   ├── ci.yml
+│   │   └── release.yml
+│   └── maintenance/
+│       ├── repo_checks.py
+│       ├── run_tests.py
+│       ├── package_release.py
+│       └── tests/
 ├── workline-init/
 │   ├── SKILL.md
 │   ├── agents/openai.yaml
@@ -260,11 +266,11 @@ Workline 过程文件由 `$workline-archive` 在移动到 `.workline/archive/<YY
 四份 `workline_csv.py` 是同步副本，必须逐字一致。这条约束不靠注释和记性维持，发布前运行：
 
 ```bash
-python tools/check_script_sync.py
-python tools/test_workline_csv.py
+python .github/maintenance/repo_checks.py
+python .github/maintenance/run_tests.py
 ```
 
-副本不一致或测试失败时退出码为 1。
+副本不一致、Skill 元数据错误或测试失败时退出码为 1。推到 `main` / `develop` 或开 PR 时，GitHub Actions 会跑同样的校验、测试，并打一份发布预览包；推送 `v*` 标签时会校验后发布 `dist/` 里的 zip。
 
 ## 推荐步骤
 

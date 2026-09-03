@@ -3,7 +3,7 @@
 
 同步副本：workline-tasks/scripts/、workline-run/scripts/、
 workline-review/scripts/、workline-archive/scripts/
-四份必须逐字一致，用 tools/check_script_sync.py 校验。
+四份必须逐字一致，用 .github/maintenance/repo_checks.py 校验。
 """
 
 from __future__ import annotations

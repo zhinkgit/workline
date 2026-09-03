@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stdlib tests for workline_csv.py. Run: python tools/test_workline_csv.py"""
+"""Stdlib tests for workline_csv.py. Run: python .github/maintenance/run_tests.py"""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = ROOT / "workline-tasks" / "scripts" / "workline_csv.py"
 INIT = ROOT / "workline-init" / "scripts" / "init_workline.py"
 
