@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Validate and update Workline tasks.csv.
 
-同步副本：workline-tasks/scripts/ 与 workline-run/scripts/ 必须逐字一致。
+同步副本：workline-tasks/scripts/、workline-run/scripts/、workline-review/scripts/
+三份必须逐字一致，用 tools/check_script_sync.py 校验。
 """
 
 from __future__ import annotations
@@ -31,13 +32,26 @@ HEADERS = [
 ]
 
 MODES = {"AFK", "HITL"}
-STATES = {"todo", "doing", "done", "failed", "blocked", "skipped"}
+STATES = {"todo", "doing", "done", "blocked", "skipped"}
 OPEN_STATES = {"todo", "doing"}
-EXCEPTION_STATES = {"failed", "blocked", "skipped"}
+EXCEPTION_STATES = {"blocked", "skipped"}
 SATISFYING_STATES = {"done", "skipped"}
 
 RUN_SECTION_RE = re.compile(r"^##\s+(\S+)", re.MULTILINE)
 COMMIT_RE = re.compile(r"^[0-9a-fA-F]{7,64}$")
+FR_HEADING_RE = re.compile(r"^###\s+(FR-\d+)\b", re.MULTILINE)
+FR_REF_RE = re.compile(r"\bFR-\d+\b")
+
+# AFK 任务的 verification 应当机器可判定。这是启发式回查，只产生 warning。
+COMMAND_HINT_RE = re.compile(
+    r"`[^`]+`"
+    r"|\b(?:python3?|py|pip|uv|npm|pnpm|yarn|bun|deno|node|pytest|tox|unittest"
+    r"|go|cargo|rustc|cmake|make|ninja|gcc|clang|clang-format|arm-none-eabi-\w+"
+    r"|dotnet|mvn|gradle|java|git|docker|kubectl|curl|wget|bash|sh|zsh|pwsh"
+    r"|powershell|ruby|php|composer|jest|vitest|eslint|ruff|mypy|black|tsc"
+    r"|openocd|jlink|probe-rs|tshark|ctest|meson|bazel)\b",
+    re.IGNORECASE,
+)
 
 
 class WorklineCsvError(Exception):
@@ -197,7 +211,23 @@ def read_run_sections(csv_path: Path) -> set[str] | None:
     return set(RUN_SECTION_RE.findall(text))
 
 
-def build_warnings(rows: list[dict[str, str]], csv_path: Path) -> list[dict[str, str]]:
+def read_prd_requirements(csv_path: Path) -> set[str] | None:
+    """返回 prd.md 中 ### FR-N 小节的编号集合；prd.md 不存在时返回 None。"""
+    prd_path = csv_path.parent / "prd.md"
+    try:
+        text = prd_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        raise WorklineCsvError(f"cannot read prd.md: {exc}") from exc
+    return set(FR_HEADING_RE.findall(text))
+
+
+def build_warnings(
+    rows: list[dict[str, str]],
+    csv_path: Path,
+    allow_empty_refs: bool = False,
+) -> list[dict[str, str]]:
     warnings: list[dict[str, str]] = []
     sections = read_run_sections(csv_path)
 
@@ -236,7 +266,59 @@ def build_warnings(rows: list[dict[str, str]], csv_path: Path) -> list[dict[str,
                     "message": f"state={row['state']}；notes: {row['notes'] or '无说明'}",
                 }
             )
+        if task_id == "REVIEW":
+            continue
+        if (
+            row["mode"] == "AFK"
+            and row["verification"]
+            and not COMMAND_HINT_RE.search(row["verification"])
+        ):
+            warnings.append(
+                {
+                    "code": "verification-weak",
+                    "task_id": task_id,
+                    "message": (
+                        "mode=AFK 但 verification 中看不到可执行命令；"
+                        "无人值守任务的验证必须机器可判定，否则应改为 HITL"
+                    ),
+                }
+            )
+        if not allow_empty_refs and not row["refs"]:
+            warnings.append(
+                {
+                    "code": "refs-missing",
+                    "task_id": task_id,
+                    "message": (
+                        "refs 为空，执行时没有任何材料清单可加载；"
+                        "确实不需要材料时用 --allow-empty-refs 豁免"
+                    ),
+                }
+            )
+
+    warnings.extend(build_coverage_warnings(rows, csv_path))
     return warnings
+
+
+def build_coverage_warnings(
+    rows: list[dict[str, str]], csv_path: Path
+) -> list[dict[str, str]]:
+    """回查 prd.md 的 FR 编号是否都被至少一条任务的 refs 引用。"""
+    requirements = read_prd_requirements(csv_path)
+    if not requirements:
+        return []
+
+    covered: set[str] = set()
+    for row in rows:
+        covered.update(FR_REF_RE.findall(row["refs"]))
+
+    return [
+        {
+            "code": "fr-uncovered",
+            "task_id": fr_id,
+            "message": f"prd.md 的 {fr_id} 没有被任何任务的 refs 引用，可能漏拆",
+        }
+        for fr_id in sorted(requirements - covered, key=lambda item: int(item[3:]))
+    ]
 
 
 def find_row(rows: list[dict[str, str]], task_id: str) -> dict[str, str]:
@@ -246,7 +328,9 @@ def find_row(rows: list[dict[str, str]], task_id: str) -> dict[str, str]:
     raise WorklineCsvError(f"unknown task id: {task_id}")
 
 
-def validate_transition(row: dict[str, str], updates: dict[str, str]) -> None:
+def validate_transition(
+    row: dict[str, str], updates: dict[str, str], csv_path: Path
+) -> None:
     new_state = updates.get("state", row["state"])
     if new_state not in STATES:
         raise WorklineCsvError(f"invalid state: {new_state}")
@@ -257,6 +341,29 @@ def validate_transition(row: dict[str, str], updates: dict[str, str]) -> None:
     if new_state in EXCEPTION_STATES and not effective_notes.strip():
         raise WorklineCsvError(f"state={new_state} requires notes")
 
+    if new_state != "done":
+        return
+
+    task_id = row["id"]
+    sections = read_run_sections(csv_path)
+    if sections is None:
+        raise WorklineCsvError(
+            f"{task_id}: cannot set state=done because run.md does not exist; "
+            f"write the ## {task_id} section first"
+        )
+    if task_id not in sections:
+        raise WorklineCsvError(
+            f"{task_id}: cannot set state=done because run.md has no ## {task_id} section; "
+            "write the run log before closing the task"
+        )
+
+    effective_commit = updates.get("commit", row["commit"]).strip()
+    if not effective_commit and not effective_notes.strip():
+        raise WorklineCsvError(
+            f"{task_id}: cannot set state=done with an empty commit unless notes explain why; "
+            "pass --commit <hash|no-change>, or --commit '' together with --notes"
+        )
+
 
 def on_complete_steps(row: dict[str, str]) -> list[str]:
     task_id = row["id"]
@@ -264,22 +371,29 @@ def on_complete_steps(row: dict[str, str]) -> list[str]:
         return [
             "逐项核对 REVIEW 检查清单",
             "最终结论写入 run.md 的 ## REVIEW 一节",
+            "判断本次任务是否产生可复用项目知识，有则交给 $workline-archive 写入 .workline/notes/",
             "set <tasks.csv> REVIEW --state done --commit no-change",
         ]
     return [
         "按 verification 执行验证，记录真实命令与真实输出",
+        "自检范围纪律：没有顺手重构、没有为当前不存在的场景加抽象或配置、"
+        "没有加投机性兜底分支、没有改任务范围外的文件、在行为真正所在的位置修而不是在调用方打补丁",
         f"在 run.md 追加 ## {task_id} 一节",
         f"set <tasks.csv> {task_id} --state done --commit <hash|no-change>",
     ]
 
 
+def print_warnings(warnings: list[dict[str, str]]) -> None:
+    for warning in warnings:
+        print(f"- {warning['code']}: {warning['task_id']} - {warning['message']}")
+
+
 def command_validate(args: argparse.Namespace) -> int:
     path = Path(args.csv_path)
     rows = validate_file(path)
-    warnings = build_warnings(rows, path)
+    warnings = build_warnings(rows, path, allow_empty_refs=args.allow_empty_refs)
     print(f"OK: {len(rows)} rows, {len(warnings)} warnings")
-    for warning in warnings:
-        print(f"- {warning['code']}: {warning['task_id']} - {warning['message']}")
+    print_warnings(warnings)
     return 0
 
 
@@ -304,13 +418,12 @@ def command_set(args: argparse.Namespace) -> int:
     if not updates:
         raise WorklineCsvError("no updates provided")
 
-    validate_transition(row, updates)
+    validate_transition(row, updates, path)
     row.update(updates)
     validate_rows(rows)
     write_rows_atomic(path, rows)
     print(f"OK: updated {args.task_id}")
-    for warning in build_warnings(rows, path):
-        print(f"- {warning['code']}: {warning['task_id']} - {warning['message']}")
+    print_warnings(build_warnings(rows, path))
     return 0
 
 
@@ -345,8 +458,8 @@ def command_next(args: argparse.Namespace) -> int:
     if unfinished:
         detail: dict[str, str] = {}
         for row in unfinished:
-            if row["state"] in {"failed", "blocked"}:
-                detail[row["id"]] = f"state={row['state']}；{row['notes'] or '无说明'}"
+            if row["state"] == "blocked":
+                detail[row["id"]] = f"state=blocked；{row['notes'] or '无说明'}"
             else:
                 unmet = [
                     f"{dep}={by_id[dep]['state']}"
@@ -379,6 +492,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     validate_parser = subparsers.add_parser("validate", help="validate tasks.csv")
     validate_parser.add_argument("csv_path")
+    validate_parser.add_argument(
+        "--allow-empty-refs",
+        action="store_true",
+        help="suppress refs-missing warnings",
+    )
     validate_parser.set_defaults(func=command_validate)
 
     set_parser = subparsers.add_parser("set", help="update one task row")

@@ -10,10 +10,23 @@ from datetime import datetime
 from pathlib import Path
 
 
+MAX_TOKEN_CHARS = 16
+MAX_SLUG_CHARS = 40
+
+
 def slugify(value: str, fallback: str = "workline") -> str:
-    words = re.findall(r"[A-Za-z0-9]+", value.lower())
-    slug = "-".join(words[:8]).strip("-")
-    return slug or fallback
+    """ASCII 词按词切分，CJK 连续段按字符截断，避免中文需求全部回退到 fallback。"""
+    tokens = re.findall(r"[A-Za-z0-9]+|[\u4e00-\u9fff\u3040-\u30ff]+", value.lower())
+    parts: list[str] = []
+    length = 0
+    for token in tokens[:8]:
+        token = token[:MAX_TOKEN_CHARS]
+        cost = len(token) + (1 if parts else 0)
+        if length + cost > MAX_SLUG_CHARS:
+            break
+        parts.append(token)
+        length += cost
+    return "-".join(parts) or fallback
 
 
 def read_slug_source(args: argparse.Namespace) -> str:

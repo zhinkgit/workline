@@ -7,7 +7,7 @@ description: "Workline 的 /goal 长任务执行规则包。Use when the user in
 
 ## 目标
 
-本 Skill 规定 `/goal` 如何执行一份 Workline `tasks.csv`：读取下一任务、更新状态、记录执行日志，并处理最终 REVIEW。
+本 Skill 规定 `/goal` 如何执行一份 Workline `tasks.csv`：读取下一任务、加载材料、更新状态、记录执行日志，并处理最终 REVIEW。
 
 四个文件角色要分清：
 
@@ -37,7 +37,7 @@ description: "Workline 的 /goal 长任务执行规则包。Use when the user in
 1. 使用 `<active-dir>/tasks.csv` 作为任务表。
 2. 使用 `<active-dir>/prd.md` 作为需求来源。
 3. 使用 `<active-dir>/run.md` 作为执行日志。
-4. 只在需要查引用材料时读取 `<active-dir>/references/`。
+4. 按当前任务的 `refs` 读取 `<active-dir>/references/` 中的材料。
 
 如果用户直接给的是 `tasks.csv`：
 
@@ -60,10 +60,17 @@ python <SKILL_DIR>/scripts/workline_csv.py next <tasks.csv>
 2. 脚本调不到时停止并报告，禁止跳过校验继续执行。
 3. `next` 返回的任务对象就是本轮执行对象；它的 `on_complete` 字段列出本任务的收尾动作，必须真实执行，不得只在回复里声称已执行。
 4. `next` 和 `validate` 输出的 `warnings` 是系统侧回查结果，必须先处理再继续：
-   - `commit-missing`：已闭环任务的提交收口没做完。
-   - `run-log-missing`：已闭环任务在 `run.md` 里没有对应小节，说明日志漏写。
-   - `exception-state`：存在 `failed` / `blocked` / `skipped` 任务。
-5. `next` 返回 `{"next": null}` 时按 `reason` 处理：`all-closed` 表示全部闭环；`needs-attention` 表示有失败、阻塞或依赖未满足的任务，按 `detail` 逐项说明并请求用户决策。
+
+   | 代码 | 含义 | 处理 |
+   | --- | --- | --- |
+   | `commit-missing` | `state=done` 但 `commit` 为空 | 补提交或补写 `notes` 说明 |
+   | `run-log-missing` | `state=done` 但 `run.md` 无对应小节 | 补写日志 |
+   | `exception-state` | 存在 `blocked` / `skipped` 任务 | 按 `notes` 判断能否继续 |
+   | `verification-weak` | `AFK` 任务的验证不像可执行命令 | 补命令或改 `HITL`，不得默认自己判定通过 |
+   | `refs-missing` | 任务没有材料清单 | 补 `refs`，或确认确实无需材料 |
+   | `fr-uncovered` | PRD 中某条 FR 没被任何任务引用 | 可能漏拆，报告用户 |
+
+5. `next` 返回 `{"next": null}` 时按 `reason` 处理：`all-closed` 表示全部闭环；`needs-attention` 表示有阻塞或依赖未满足的任务，按 `detail` 逐项说明并请求用户决策。
 6. 如果 `run.md` 不存在，创建它，并记录本次入口时间、PRD 路径和 CSV 路径。
 
 ## 读取任务
@@ -76,10 +83,25 @@ python <SKILL_DIR>/scripts/workline_csv.py next <tasks.csv>
 | `mode` | 判断是否需要 HITL、人工确认或实机参与 |
 | `title` / `description` | 明确本任务要做什么，以及验证命令覆盖不到的完成标准 |
 | `verification` | 决定要跑什么验证或做什么人工检查，以及什么输出算通过 |
-| `refs` / `notes` | 查引用、了解已有阻塞原因 |
+| `refs` | 本任务的材料加载清单，见下节 |
+| `notes` | 了解已有阻塞原因 |
 | `on_complete` | 本任务的收尾动作清单 |
 
 如果任务 `id=REVIEW`，跳到“REVIEW 行”。其它任务按“普通任务执行”处理。
+
+## 加载 refs 材料
+
+`refs` 是本任务的材料加载清单，实现前按它取材料，不要通读整个 `prd.md` 和整个 `references/`：
+
+| 形式 | 加载动作 |
+| --- | --- |
+| `FR-2` | 读 `prd.md` 中 `### FR-2` 小节，以及“验收标准”“约束条件”中与之相关的条目 |
+| `references/xxx.md` | 读该文件 |
+| `evidence/T00X-xxx/` | 前序任务的产物，需要复查时才读 |
+
+`refs` 为空时，读 `prd.md` 的“目标”“功能要求”“验收标准”三节作为兜底，并在 `run.md` 中记录这条任务没有材料清单。
+
+`refs` 里不应出现源码路径。需要改哪些源码由你自己搜索定位，这是实现工作的一部分。
 
 ## 普通任务执行
 
@@ -118,9 +140,21 @@ python <SKILL_DIR>/scripts/workline_csv.py set <tasks.csv> T001 --state doing
 3. 失败原因、阻塞项或未覆盖范围。
 4. 必要时说明未覆盖真实设备、真实服务或真实 ACK。
 
+### 范围纪律自检
+
+标记完成前，对照 `on_complete` 中的范围纪律条目自检，这是针对 AI 编码典型偏差的检查：
+
+1. 是否做了任务没要求的顺手整理或重构。
+2. 是否为当前不存在的场景加了抽象层、配置项或扩展点。
+3. 是否为不可能发生的状态加了投机性兜底分支。
+4. 是否改了 PRD 和任务描述都没提到的文件。
+5. 是否在调用方打了补丁，而不是去行为真正所在的位置修。
+
+发现偏差就在本任务内收回，不要留到 REVIEW。
+
 ### 写入 run.md
 
-`run.md` 只写人类需要复盘的信息，保持简短。小节标题必须是 `## <任务 ID> <title>`，脚本靠这个标题回查日志是否真的写了：
+`run.md` 只写人类需要复盘的信息，保持简短。小节标题必须是 `## <任务 ID> <title>`，脚本靠这个标题判定日志是否真的写了；**没有这个小节，`set --state done` 会被拒绝**。
 
 ```md
 ## T001 <title>
@@ -150,13 +184,14 @@ python <SKILL_DIR>/scripts/workline_csv.py set <tasks.csv> T001 --append-refs "e
 执行顺序：
 
 1. 运行 `git status --short`，把脏文件分成两类：本次会话中你自己改的业务文件，以及你没有碰过的文件。后者不得静默纳入提交。
-2. 提交范围限于当前任务相关的业务代码、测试、文档或配置文件。
-3. 使用显式路径暂存文件。
-4. 没有业务改动需要提交时，`commit` 写 `no-change`。
-5. 成功提交后，`commit` 写 7–64 位十六进制提交哈希。
-6. 当前环境无法安全提交时（改动归属不清、提交失败、当前目录不是 Git 仓库），`commit` 留空，在 `notes` 和 `run.md` 写明原因，然后继续执行后续任务。
+2. 运行 `git log --oneline -5` 学习本仓库的提交信息风格：前缀约定、中英文、长度习惯。生成的提交信息要融入已有风格，不要引入第四种写法。
+3. 提交范围限于当前任务相关的业务代码、测试、文档或配置文件。
+4. 使用显式路径暂存文件。
+5. 没有业务改动需要提交时，`commit` 写 `no-change`。
+6. 成功提交后，`commit` 写 7–64 位十六进制提交哈希。
+7. 当前环境无法安全提交时（改动归属不清、提交失败、当前目录不是 Git 仓库），`commit` 留空，在 `notes` 和 `run.md` 写明原因，然后继续执行后续任务。
 
-任务级提交信息推荐包含任务 ID：
+任务级提交信息在仓库风格基础上带上任务 ID：
 
 ```text
 workline: T003 完成批量导入校验
@@ -164,11 +199,18 @@ workline: T003 完成批量导入校验
 
 ### 标记完成
 
-验证通过且提交收口处理完后，一次性写入终态：
+验证通过、日志写完、提交收口处理完后，一次性写入终态：
 
 ```bash
 python <SKILL_DIR>/scripts/workline_csv.py set <tasks.csv> T001 --state done --commit abc1234
 ```
+
+脚本会在写入前强制回查两条，不满足直接拒绝，不是警告：
+
+1. `run.md` 中必须已有 `## T001` 小节。
+2. `commit` 必须非空；确实无法提交时用 `--commit "" --notes "<原因>"` 显式说明。
+
+被拒绝时说明动作顺序错了：先写日志、先处理提交，再标记完成。不要为了通过校验而伪造日志或哈希。
 
 ## 失败与阻塞
 
@@ -176,12 +218,25 @@ python <SKILL_DIR>/scripts/workline_csv.py set <tasks.csv> T001 --state done --c
 
 1. 验证失败或初步检查失败时，不得把 `state` 标为 `done`。
 2. 如果可以继续修复，保持 `doing`，并在 `run.md` 记录失败输出或检查结论。
-3. 如果验证已执行且未通过、本轮不再继续，更新为 `failed` 并写明原因。
-4. 如果当前条件不足导致无法继续，更新为 `blocked` 并写明原因。
-5. 提交失败不改变验证结论，只让 `commit` 留空并记录原因。
-6. `skipped` 只能来自用户确认或 PRD 明确允许；必须在 `notes` 和 `run.md` 记录依据。
+3. 如果验证已执行未通过、或当前条件不足无法继续，且本轮不再推进，更新为 `blocked` 并在 `notes` 写明属于哪种情况和具体原因。
+4. 提交失败不改变验证结论，只让 `commit` 留空并记录原因。
+5. `skipped` 只能来自用户确认或 PRD 明确允许；必须在 `notes` 和 `run.md` 记录依据。
 
 验证结论必须来自真实命令、人工检查或外部确认。
+
+## 执行中新增任务
+
+实现过程中发现 `tasks.csv` 漏了必要工作时，按下面处理，不要顺手做掉：
+
+1. 判断它属于哪一类：
+   - 当前任务范围内的必要步骤 → 直接做，不新增任务。
+   - PRD 已有要求但拆分时漏了 → 需要新增任务。
+   - PRD 里没有的新需求 → 停止，回 `$workline-grill` 澄清，不在执行阶段扩展需求。
+2. 需要新增任务时，先向用户说明发现了什么、为什么现有任务表覆盖不了，请求确认。
+3. 用户确认后，在 `REVIEW` 行之前插入新行，ID 用未使用过的编号（如 `T012`），填全 `mode`、`verification`、`refs`，`state=todo`。
+4. `REVIEW` 行不需要修改，它隐式依赖全部任务。
+5. 重新运行 `validate`，再继续执行。
+6. 在 `run.md` 中记录新增了哪条任务和依据。
 
 ## REVIEW 行
 
@@ -191,10 +246,10 @@ REVIEW 只做检查和结论，不实现任务。
 
 覆盖检查：
 
-1. PRD 功能要求和验收标准是否都有任务覆盖。
+1. PRD 功能要求和验收标准是否都有任务覆盖；重点核对 `fr-uncovered` warning。
 2. 每条完成任务是否有真实验证记录和 `run.md` 小节。
 3. 有独立产物的任务是否有 `evidence/` 路径。
-4. HITL、真实链路未覆盖、失败、阻塞、跳过是否都有解释。
+4. HITL、真实链路未覆盖、阻塞、跳过是否都有解释。
 5. `commit` 为空的任务是否已记录为归档前待处理问题。
 
 范围纪律检查，针对 AI 编码的典型偏差：
@@ -205,6 +260,10 @@ REVIEW 只做检查和结论，不实现任务。
 4. 是否改了 PRD 和任务描述都没提到的文件。
 5. 是否在调用方打了补丁，而不是去行为真正所在的位置修。
 
+知识沉淀判断：
+
+本次任务是否产生了**跨任务复用**的项目知识——项目约定、踩过的坑、关键技术决策及原因。有则在 `run.md` 的 `## REVIEW` 小节列出候选条目（主题、结论、原因、适用范围），交给 `$workline-archive` 写入 `.workline/notes/`。本次任务的具体实现细节不属于此类，它们留在归档目录里。
+
 发现缺口时，只记录问题、更新状态，并按需要请求用户确认。结论写入 `run.md` 的 `## REVIEW` 小节。
 
 ## 硬约束
@@ -213,15 +272,18 @@ REVIEW 只做检查和结论，不实现任务。
 - 状态字段通过 `workline_csv.py set` 更新。
 - 目标、功能要求和验收标准来自 `prd.md`。
 - 通过结论必须有真实验证依据。
+- 先写 `run.md` 小节，再标记 `done`。
 - `commit` 为空不阻止后续任务和 REVIEW，但会阻止 `$workline-archive` 归档。
+- 执行阶段不扩展需求范围。
 
 ## 输出
 
 完成或暂停时说明：
 
 - 当前任务 ID 和状态更新结果。
+- 加载了哪些 `refs` 材料。
 - `run.md` 记录位置，以及 evidence 产物路径（如有）。
 - 验证命令或人工检查结论。
 - `commit` 结论；如果为空，说明原因。
 - 脚本输出的 warnings 及处理情况。
-- 如果执行的是 REVIEW，说明最终检查结论和归档前待处理问题。
+- 如果执行的是 REVIEW，说明最终检查结论、知识沉淀候选条目和归档前待处理问题。

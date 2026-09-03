@@ -28,6 +28,8 @@ description: "初始化 Workline 长任务过程目录。Use when the user wants
    - `references/`
 4. 返回活动目录路径，并提示用户手动填写 `brief.md`，手动把参考资料、旧代码、协议文档或其它输入材料放入 `references/`。
 
+材料由用户主动收集，本 Skill 不代替用户判断需要哪些材料，也不代写 `brief.md`。材料够不够由 `$workline-grill` 在澄清开始前评估并指出缺口。
+
 示例：
 
 ```bash
@@ -48,4 +50,4 @@ python <SKILL_DIR>/scripts/init_workline.py --root . --slug bulk-import --brief 
 - `brief.md` 已创建为基础模板，创建时间已填充。
 - `references/` 已创建为空目录。
 - 请按 `brief.md` 模板手动填写原始粗需求，并把参考资料放入 `references/`，同时在“已放入 references/ 的材料及用途”表中登记每份材料的用途。
-- 下一步再使用 `$workline-grill`。
+- 材料收集齐后使用 `$workline-grill`；它会先评估材料是否够用并指出缺口，再开始逐问逐答澄清。
