@@ -40,9 +40,17 @@ def read_slug_source(args: argparse.Namespace) -> str:
     return "\n\n".join(part for part in parts if part).strip()
 
 
+def skill_template(name: str) -> Path:
+    return Path(__file__).resolve().parents[1] / "templates" / name
+
+
 def render_brief_template(created_at: str, title: str) -> str:
-    template_path = Path(__file__).resolve().parents[1] / "templates" / "brief.md"
-    template = template_path.read_text(encoding="utf-8")
+    template = skill_template("brief.md").read_text(encoding="utf-8")
+    return template.replace("{{created_at}}", created_at).replace("{{title}}", title)
+
+
+def render_run_template(created_at: str, title: str) -> str:
+    template = skill_template("run.md").read_text(encoding="utf-8")
     return template.replace("{{created_at}}", created_at).replace("{{title}}", title)
 
 
@@ -80,7 +88,12 @@ def main() -> int:
     archive_dir.mkdir(parents=True, exist_ok=True)
 
     created_at = datetime.now().astimezone().isoformat(timespec="seconds")
-    (active_dir / "brief.md").write_text(render_brief_template(created_at, active_dir.name), encoding="utf-8")
+    (active_dir / "brief.md").write_text(
+        render_brief_template(created_at, active_dir.name), encoding="utf-8"
+    )
+    (active_dir / "run.md").write_text(
+        render_run_template(created_at, active_dir.name), encoding="utf-8"
+    )
 
     print(active_dir)
     return 0

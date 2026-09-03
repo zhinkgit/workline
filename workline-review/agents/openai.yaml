@@ -1,4 +1,4 @@
 interface:
   display_name: "Workline Review"
   short_description: "审查Workline PRD和任务CSV并形成阶段门禁结论"
-  default_prompt: "Use $workline-review to review this Workline prd.md or tasks.csv before the next stage."
+  default_prompt: "Use $workline-review to review this Workline prd.md or tasks.csv and write the gate result into run.md. Same-session review is required; an extra pass by another agent is optional."

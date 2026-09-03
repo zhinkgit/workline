@@ -13,33 +13,30 @@ description: "归档已完成的 Workline 活动目录并沉淀项目知识。Us
 
 ## 路径约定
 
-`<SKILL_DIR>` 指本 SKILL.md 所在目录的绝对路径。`<CSV_SCRIPT>` 指 `workline-tasks`、`workline-run` 或 `workline-review` skill 目录下的 `scripts/workline_csv.py`，三份实现等价，任选其一。运行环境未提供 skill 目录变量时，先定位实际路径再替换。所有命令都在项目根目录下执行。
+`<SKILL_DIR>` 指本 SKILL.md 所在目录的绝对路径。运行环境未提供该变量时，先定位本文件的实际路径再替换。所有命令都在项目根目录下执行。
+
+本 Skill 自带 `<SKILL_DIR>/scripts/workline_csv.py`，不要去其它 skill 目录找脚本。
 
 ## 归档前检查
 
-先确认活动目录包含以下必需路径：
+先确认活动目录包含：`brief.md`、`prd.md`、`tasks.csv`、`run.md`、`references/`。任何一项缺失都停止，不得移动目录。
 
-- `brief.md`
-- `prd.md`
-- `tasks.csv`
-- `run.md`
-- `references/`
-
-任何必需路径缺失都必须停止，不得移动目录。
-
-最终审计由 `REVIEW` 行负责，本 Skill 只做搬运前确认，检查三条：
+最终审计由 `REVIEW` 行负责。本 Skill 只做搬运前硬检查：
 
 ```bash
-python <CSV_SCRIPT> validate .workline/active/<slug>/tasks.csv
+python <SKILL_DIR>/scripts/workline_csv.py archive-check .workline/active/<slug>/tasks.csv
 ```
 
-1. `REVIEW` 行 `state=done`，且 `run.md` 中有 `## REVIEW` 小节记录最终结论。
-2. 不存在 `todo`、`doing`、`blocked` 的任务；`skipped` 任务必须在 `notes` 和 `run.md` 中有依据。
-3. 校验输出中不存在 `commit-missing` 和 `run-log-missing` 两类 warning。
+`archive-check` 失败即停止，列出具体缺口，不做移动。它会核验：
 
-任何一条不满足就停止，列出具体缺口，不做移动。
+1. 必需路径存在。
+2. `REVIEW` 为 `done`，且 `run.md` 有完整的 `## REVIEW` 小节。
+3. 不存在 `todo` / `doing` / `blocked` 任务；`skipped` 必须有 `notes`。
+4. 所有 `done` 任务的日志完整、commit 可核验。
+5. `run.md`「阶段门禁」中 `materials` 为 `CONFIRMED` 或 `WAIVED`，`prd-review` 与 `tasks-review` 为 `PASS`，`execute` 为 `CONFIRMED`。
+6. 不存在未覆盖的 `FR-` / `NFR-` 编号。
 
-`verification-weak`、`refs-missing`、`fr-uncovered` 不阻止归档，但要在输出中列出，供用户判断本次任务的过程质量。
+`verification-weak`、`refs-missing`、`skipped-unblocks` 不阻止归档，但要在输出中列出。
 
 ## 知识沉淀
 
@@ -53,7 +50,7 @@ python <CSV_SCRIPT> validate .workline/active/<slug>/tasks.csv
 - **不是过程记录**：不是“本次改了什么”，而是“本项目是怎样的”。
 - **有原因**：光有结论没有原因的条目，下次会被推翻重来。
 
-典型该沉淀的：项目约定（命名、目录、错误处理、日志格式）、踩过的坑及规避方式、关键技术决策及其取舍、外部依赖的非显然行为、环境和工具链的特殊配置。
+典型该沉淀的：项目约定、踩过的坑及规避方式、关键技术决策及其取舍、外部依赖的非显然行为、环境和工具链的特殊配置。
 
 典型不该沉淀的：本次任务的实现细节、一次性的临时决定、已经写在代码注释或项目文档里的内容、通用编程知识。
 
@@ -94,6 +91,13 @@ New-Item -ItemType Directory -Force -Path ".workline\archive\<YYYY-MM>" | Out-Nu
 Move-Item -LiteralPath ".workline\active\<slug>" -Destination ".workline\archive\<YYYY-MM>\<slug>"
 ```
 
+POSIX 示例：
+
+```bash
+mkdir -p ".workline/archive/<YYYY-MM>"
+mv ".workline/active/<slug>" ".workline/archive/<YYYY-MM>/<slug>"
+```
+
 ## 归档提交
 
 移动目录后，提交 Workline 核心过程文件和本次新增的知识条目：
@@ -106,8 +110,6 @@ Move-Item -LiteralPath ".workline\active\<slug>" -Destination ".workline\archive
 
 `references/` 和 `evidence/` 作为过程材料保留在归档目录中，不进入这次提交。
 
-提交命令使用显式路径：
-
 ```powershell
 git add -- ".workline/archive/<YYYY-MM>/<slug>/brief.md" ".workline/archive/<YYYY-MM>/<slug>/prd.md" ".workline/archive/<YYYY-MM>/<slug>/tasks.csv" ".workline/archive/<YYYY-MM>/<slug>/run.md" ".workline/notes/index.md" ".workline/notes/<主题>.md"
 git commit -m "workline: archive <slug>"
@@ -119,7 +121,7 @@ git commit -m "workline: archive <slug>"
 
 - 日志以已有真实记录为准。
 - 归档目标必须是新目录。
-- 闭环条件不满足时停止并列出具体缺口。
+- `archive-check` 失败时停止并列出具体缺口。
 - 知识条目必须有原因，不得只写结论。
 - 知识冲突时停止询问，不静默覆盖已有条目。
 - 归档提交范围限于四个核心过程文件和本次变更的 notes 文件。
@@ -130,7 +132,7 @@ git commit -m "workline: archive <slug>"
 完成时说明：
 
 - 归档源路径和目标路径。
-- 必需路径检查和三条闭环检查的结果。
+- `archive-check` 的结果。
 - 不阻塞归档但值得注意的 warning。
 - 写入 `.workline/notes/` 的条目清单；无新增时明确说明。
 - 归档提交结果；如果提交失败，给出需要用户处理的 Git 状态。

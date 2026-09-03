@@ -21,8 +21,17 @@ description: "Workline 需求澄清与 PRD 生成。Use when the user provides a
 
 - `brief.md` 存在。
 - `references/` 存在。
+- `run.md` 存在，且含 `## 阶段门禁`。
 
-如果缺少活动目录路径，先要求用户提供路径。
+如果缺少活动目录路径，先要求用户提供路径。`run.md` 或其中的「阶段门禁」缺失时停止并回到 `$workline-init`。
+
+材料确认和后续审查结论都写在 `run.md` 的「阶段门禁」表，不要写进会被 PRD 收敛重写的正文。写入时优先调用已安装的 `$workline-review` / `$workline-tasks` / `$workline-run` / `$workline-archive` 中任意一份 `scripts/workline_csv.py`：
+
+```bash
+python <CSV_SCRIPT> gates-set .workline/active/<slug> --gate materials --status CONFIRMED --actor user --notes "材料已齐"
+```
+
+找不到脚本时，直接改 `run.md` 里「阶段门禁」表对应行，不得省略 `materials` 这一行。
 
 ## 需求分诊
 
@@ -31,7 +40,7 @@ description: "Workline 需求澄清与 PRD 生成。Use when the user provides a
 | 档位 | 判据 | 处理 |
 | --- | --- | --- |
 | 直接改 | 单文件、单点修改，一轮内能实现并验证 | 建议放弃本活动目录直接改，不产出 PRD |
-| 轻量 | 3～5 个任务能覆盖，边界清晰无关键决策待定 | 跳过完整 PRD，只写“背景与目标 / 功能要求 / 验收标准”三节，直接进 `$workline-tasks` |
+| 轻量 | 3～5 个任务能覆盖，边界清晰无关键决策待定 | 跳过完整澄清，只写“背景与目标 / 功能要求 / 验收标准”三节，但功能要求仍须 `### FR-<序号>`；写完后进入 `$workline-review`，不要直接进 `$workline-tasks` |
 | 完整 | 多文件改动、涉及接口或数据格式、有待定决策或兼容性风险 | 走完整澄清流程 |
 
 分诊结论写入 `prd.md` 的“背景与目标”一节。用户坚持走完整流程时照办，不反复劝说。
@@ -51,7 +60,7 @@ description: "Workline 需求澄清与 PRD 生成。Use when the user provides a
 - 还缺哪些材料、为什么需要、缺了会导致什么判断做不了。
 - 缺失是否阻塞开始澄清。
 
-用户明确表示材料已齐或允许在材料不足时开始时，进入提问队列。用户补充材料后重新评估一次。
+用户明确表示材料已齐时，把 `materials` 写成 `CONFIRMED` 再进入提问队列。用户允许在材料不足时开始时，写成 `WAIVED` 并在 `notes` 说明缺了什么。用户补充材料后重新评估一次。未得到这两种明确表态前，保持 `未确认`，不要开始提问。
 
 ## 证据规则
 
@@ -70,7 +79,7 @@ description: "Workline 需求澄清与 PRD 生成。Use when the user provides a
 - **禁止问流程性问题**，例如“要不要我先搜一下代码”“要不要继续澄清”“需要我把结论写进 PRD 吗”。这些直接做。
 - 需求和已有证据已经解决了全部关键决策时，不要为了凑流程制造澄清问题，直接进入 PRD 收敛。
 
-阶段转换确认不算流程性问题：宣布澄清完成、请求用户确认可以进入任务拆分，是必需的门禁。
+阶段转换确认不算流程性问题：宣布澄清完成、请求用户确认进入 `$workline-review`，是必需的门禁。不要在本 Skill 里直接进入任务拆分。
 
 ## 用户选择工具
 
@@ -97,7 +106,9 @@ description: "Workline 需求澄清与 PRD 生成。Use when the user provides a
 ### FR-2 导入前校验字段格式
 ```
 
-编号连续、不复用、不因中途删改而重排已发布的编号。`tasks.csv` 的 `refs` 列引用这些编号，`workline_csv.py` 据此回查哪些功能要求没有被任何任务覆盖，并输出 `fr-uncovered` warning。没有编号，覆盖性检查就只能靠执行者自述。
+编号连续、不复用、不因中途删改而重排已发布的编号，也不要写成 `FR-01`。`tasks.csv` 的 `refs` 列引用这些编号，`workline_csv.py` 据此回查哪些功能要求没有被任何任务覆盖，并输出 `fr-uncovered` warning。没有 `### FR-<序号>` 标题时会输出 `fr-headings-missing`，覆盖性检查不会运行。
+
+需要单独拆任务的非功能要求写成 `### NFR-<序号> <标题>`，同样写入 `refs`。
 
 ## PRD 收敛
 
@@ -107,12 +118,12 @@ description: "Workline 需求澄清与 PRD 生成。Use when the user provides a
 - 把已解决的待确认问题从“风险与待确认问题”表中删除，结论并入相应章节。
 - 删除中途假设、临时理解和已被推翻的方案，保留它们在“关键决策与澄清记录”中的结论行。
 - 保留每一条决策、约束、功能要求和验收标准，以及它们的来源引用。
-- 核对 FR 编号连续、无重复、无空占位小节。
+- 核对 FR / NFR 编号连续、无重复、无空占位小节、无前导零。
 - 无明确用户流程的任务（重构、配置、工具链改造）可删除“典型流程”整节。
 
 ## PRD 完成条件
 
-进入 `$workline-tasks` 前，`prd.md` 必须满足：
+进入 `$workline-review` 前，`prd.md` 必须满足：
 
 - 目标明确。
 - 非目标明确。
@@ -121,19 +132,22 @@ description: "Workline 需求澄清与 PRD 生成。Use when the user provides a
 - 关键决策有来源。
 - “风险与待确认问题”不存在阻塞任务拆分的未闭环问题。
 - 已完成一次 PRD 收敛。
+- `run.md` 的「阶段门禁」中 `materials` 为 `CONFIRMED` 或 `WAIVED`。
 
 ## 硬约束
 
 - PRD 只保留关键问答和决策。
 - 不在材料充分性评估之前开始提问。
 - 不修改 `brief.md`。
+- 澄清完成后不得调用 `$workline-tasks`，必须先跑 `$workline-review`。
 
 ## 输出
 
 完成时说明：
 
 - 分诊结论。
-- `prd.md` 路径和 FR 编号清单。
+- `prd.md` 路径和 FR / NFR 编号清单。
 - 已闭环的关键决策。
 - 仍存在但不阻塞任务拆分的风险或待确认问题。
-- 下一步使用 `$workline-tasks` 拆分任务；如果用户希望先复核 PRD，再主动调用 `$workline-review`。
+- `materials` 门禁已写成 `CONFIRMED` 还是 `WAIVED`。
+- 下一步必须使用 `$workline-review` 审查 PRD。同一会话跑即可；若还想换一个 agent 再审一遍，那是可选的第二次调用。

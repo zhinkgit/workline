@@ -16,6 +16,7 @@ COPIES = [
     "workline-tasks/scripts/workline_csv.py",
     "workline-run/scripts/workline_csv.py",
     "workline-review/scripts/workline_csv.py",
+    "workline-archive/scripts/workline_csv.py",
 ]
 
 

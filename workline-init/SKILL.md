@@ -1,6 +1,6 @@
 ---
 name: workline-init
-description: "初始化 Workline 长任务过程目录。Use when the user wants to start a new lightweight long-task workflow from a rough requirement, create a timestamped directory under .workline/active, create brief.md and references, or prepare materials before PRD grilling."
+description: "初始化 Workline 长任务过程目录。Use when the user wants to start a new lightweight long-task workflow from a rough requirement, create a timestamped directory under .workline/active, create brief.md, run.md and references, or prepare materials before PRD grilling."
 ---
 
 # Workline Init
@@ -25,6 +25,7 @@ description: "初始化 Workline 长任务过程目录。Use when the user wants
 2. 运行初始化脚本创建 `.workline/active/<YYYY-MM-DD-HHMM-slug>/`。
 3. 确认新目录包含：
    - `brief.md`
+   - `run.md`
    - `references/`
 4. 返回活动目录路径，并提示用户手动填写 `brief.md`，手动把参考资料、旧代码、协议文档或其它输入材料放入 `references/`。
 
@@ -48,6 +49,7 @@ python <SKILL_DIR>/scripts/init_workline.py --root . --slug bulk-import --brief 
 
 - 新建活动目录路径。
 - `brief.md` 已创建为基础模板，创建时间已填充。
+- `run.md` 已创建，内含「阶段门禁」表，四扇门都是未确认 / 未审查。
 - `references/` 已创建为空目录。
 - 请按 `brief.md` 模板手动填写原始粗需求，并把参考资料放入 `references/`，同时在“已放入 references/ 的材料及用途”表中登记每份材料的用途。
 - 材料收集齐后使用 `$workline-grill`；它会先评估材料是否够用并指出缺口，再开始逐问逐答澄清。
