@@ -124,11 +124,15 @@ python <SKILL_DIR>/scripts/workline_csv.py gates-set .workline/active/<slug> --g
 python <SKILL_DIR>/scripts/workline_csv.py gates-set .workline/active/<slug> --gate tasks-review --status PASS --actor same-session
 ```
 
+脚本会强制门禁顺序：`prd-review=PASS` 前必须已确认或豁免材料，`tasks-review=PASS` 前必须有当前有效的 PRD PASS。非初始状态必须填 `--actor`。
+
+PRD PASS 会保存 `prd.md` 的 SHA-256，任务 PASS 会保存规范化任务计划摘要。后续文件发生实质变化时，`require-gates` 会拒绝旧结论。需求未覆盖、非法/缺失 refs 和前导零编号会直接阻止任务 PASS。
+
 `--actor` 区分审查方：`same-session` 表示当前会话的必审；换模型或换 agent 再审时用 `external-agent` 或具体模型名。
 
-`prd-review` 写成 `PASS` 时，脚本默认会把 `tasks-review` 和 `execute` 重置为未完成。这是故意的：PRD 有实质修订后再通过，旧任务表不能继续当作已审。
+`prd-review` 写成 `PASS` 时，脚本默认会把 `tasks-review` 和 `execute` 重置为未完成。这是故意的：PRD 有实质修订后再通过，旧任务表不能继续当作已审。PRD 被写成 `REVISE` / `BLOCKED` 也会重置下游。
 
-若这是任务表已经审查过之后的 **PRD 加审**，且本次没有改 PRD 正文，才加 `--keep-downstream`，避免无意义地作废任务审查。第一次 PRD 必审不要加这个开关。
+若这是任务表已经审查过之后的 **PRD 加审**，且本次没有改 PRD 正文，才加 `--keep-downstream`，避免无意义地作废任务审查。脚本会核对已有摘要，PRD 已改时该开关也会失败。第一次 PRD 必审不要加这个开关。
 
 任务审查为 `PASS` 后，先请求执行确认，用户明确同意后再写：
 

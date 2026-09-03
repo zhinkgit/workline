@@ -102,6 +102,26 @@ class WorklineCsvTests(unittest.TestCase):
             sys.stdout, sys.stderr = old_out, old_err
         return code, stdout.getvalue(), stderr.getvalue()
 
+    def write_run(self, body: str, directory: Path | None = None) -> None:
+        directory = directory or self.tmpdir
+        template = (ROOT / "workline-init" / "templates" / "run.md").read_text(
+            encoding="utf-8"
+        )
+        text = template.replace("{{title}}", "test").replace("{{created_at}}", "now")
+        (directory / "run.md").write_text(text + "\n" + body, encoding="utf-8")
+
+    def approve_execution(self, directory: Path | None = None) -> None:
+        directory = directory or self.tmpdir
+        commands = [
+            ["gates-set", str(directory), "--gate", "materials", "--status", "CONFIRMED", "--actor", "user"],
+            ["gates-set", str(directory), "--gate", "prd-review", "--status", "PASS", "--actor", "same-session"],
+            ["gates-set", str(directory), "--gate", "tasks-review", "--status", "PASS", "--actor", "same-session"],
+            ["gates-set", str(directory), "--gate", "execute", "--status", "CONFIRMED", "--actor", "user"],
+        ]
+        for command in commands:
+            code, _, err = self.run_cmd(command)
+            self.assertEqual(code, 0, err)
+
     def test_hitl_doing_does_not_starve_afk(self) -> None:
         write_csv(
             self.csv_path,
@@ -182,14 +202,16 @@ class WorklineCsvTests(unittest.TestCase):
 
     def test_set_rejects_incomplete_log_and_fake_hash_without_git(self) -> None:
         write_csv(self.csv_path, [task(id="T001", state="doing"), REVIEW])
-        (self.tmpdir / "run.md").write_text("## T001 stub\n", encoding="utf-8")
+        self.write_run("## T001 stub\n")
+        self.approve_execution()
         code, _, err = self.run_cmd(
             ["set", str(self.csv_path), "T001", "--state", "done", "--commit", "deadbeef"]
         )
         self.assertEqual(code, 1)
         self.assertIn("不完整", err)
 
-        (self.tmpdir / "run.md").write_text(complete_log(), encoding="utf-8")
+        self.write_run(complete_log())
+        self.approve_execution()
         code, _, err = self.run_cmd(
             ["set", str(self.csv_path), "T001", "--state", "done", "--commit", "deadbeef"]
         )
@@ -198,7 +220,8 @@ class WorklineCsvTests(unittest.TestCase):
 
     def test_set_accepts_complete_log_and_no_change(self) -> None:
         write_csv(self.csv_path, [task(id="T001", state="doing"), REVIEW])
-        (self.tmpdir / "run.md").write_text(complete_log(), encoding="utf-8")
+        self.write_run(complete_log())
+        self.approve_execution()
         code, out, err = self.run_cmd(
             ["set", str(self.csv_path), "T001", "--state", "done", "--commit", "no-change"]
         )
@@ -223,7 +246,8 @@ class WorklineCsvTests(unittest.TestCase):
 
     def test_todo_cannot_jump_to_done(self) -> None:
         write_csv(self.csv_path, [task(id="T001", state="todo"), REVIEW])
-        (self.tmpdir / "run.md").write_text(complete_log(), encoding="utf-8")
+        self.write_run(complete_log())
+        self.approve_execution()
         code, _, err = self.run_cmd(
             ["set", str(self.csv_path), "T001", "--state", "done", "--commit", "no-change"]
         )
@@ -287,7 +311,8 @@ class WorklineCsvTests(unittest.TestCase):
 
     def test_empty_commit_with_notes_allows_next_but_blocks_archive(self) -> None:
         write_csv(self.csv_path, [task(id="T001", state="doing"), REVIEW])
-        (self.tmpdir / "run.md").write_text(complete_log(), encoding="utf-8")
+        self.write_run(complete_log())
+        self.approve_execution()
         code, _, err = self.run_cmd(
             [
                 "set",
@@ -305,31 +330,21 @@ class WorklineCsvTests(unittest.TestCase):
         code, out, err = self.run_cmd(["next", str(self.csv_path)])
         self.assertEqual(code, 0, err)
         self.assertEqual(json.loads(out)["id"], "REVIEW")
-        (self.tmpdir / "run.md").write_text(
-            complete_log() + "\n" + complete_log("REVIEW"), encoding="utf-8"
-        )
+        self.write_run(complete_log() + "\n" + complete_log("REVIEW"))
+        self.approve_execution()
         self.run_cmd(["set", str(self.csv_path), "REVIEW", "--state", "doing"])
         self.run_cmd(
             ["set", str(self.csv_path), "REVIEW", "--state", "done", "--commit", "no-change"]
         )
         (self.tmpdir / "brief.md").write_text("# b\n", encoding="utf-8")
         (self.tmpdir / "references").mkdir(exist_ok=True)
-        for gate, status in [
-            ("materials", "CONFIRMED"),
-            ("prd-review", "PASS"),
-            ("tasks-review", "PASS"),
-            ("execute", "CONFIRMED"),
-        ]:
-            extra = ["--keep-downstream"] if gate == "prd-review" else []
-            self.run_cmd(
-                ["gates-set", str(self.tmpdir), "--gate", gate, "--status", status, *extra]
-            )
         code, _, err = self.run_cmd(["archive-check", str(self.csv_path)])
         self.assertEqual(code, 1)
         self.assertIn("commit empty", err)
 
     def test_add_inserts_before_review(self) -> None:
         write_csv(self.csv_path, [task(id="T001"), REVIEW])
+        self.approve_execution()
         code, _, err = self.run_cmd(
             [
                 "add",
@@ -350,8 +365,17 @@ class WorklineCsvTests(unittest.TestCase):
         self.assertEqual(code, 0, err)
         rows = M.read_rows(self.csv_path)
         self.assertEqual([row["id"] for row in rows], ["T001", "T002", "REVIEW"])
+        self.assertEqual(rows[-1]["state"], "todo")
+        gate_rows = M.read_gates(self.tmpdir / "run.md")
+        by_id = {row["gate"]: row for row in gate_rows}
+        self.assertEqual(by_id["tasks-review"]["status"], "未审查")
+        self.assertEqual(by_id["execute"]["status"], "未确认")
 
     def test_gates_require_and_prd_pass_resets_downstream(self) -> None:
+        write_csv(self.csv_path, [task(id="T001"), REVIEW])
+        self.run_cmd(
+            ["gates-set", str(self.tmpdir), "--gate", "materials", "--status", "CONFIRMED", "--actor", "user"]
+        )
         code, _, err = self.run_cmd(
             [
                 "gates-set",
@@ -418,6 +442,21 @@ class WorklineCsvTests(unittest.TestCase):
                 "user",
             ]
         )
+        self.assertEqual(code, 1)
+        self.assertIn("缺少 ## 阶段门禁", err)
+        code, _, err = self.run_cmd(
+            [
+                "gates-set",
+                str(self.tmpdir),
+                "--gate",
+                "materials",
+                "--status",
+                "CONFIRMED",
+                "--actor",
+                "user",
+                "--init",
+            ]
+        )
         self.assertEqual(code, 0, err)
         text = (self.tmpdir / "run.md").read_text(encoding="utf-8")
         self.assertIn("## 阶段门禁", text)
@@ -444,16 +483,16 @@ class WorklineCsvTests(unittest.TestCase):
         self.assertIn("阶段门禁", (active / "run.md").read_text(encoding="utf-8"))
         self.assertTrue((active / "brief.md").exists())
         self.assertTrue((active / "references").is_dir())
+        self.assertIn("bulk import", (active / "brief.md").read_text(encoding="utf-8"))
 
         write_csv(
             self.csv_path,
             [task(id="T001", state="doing"), REVIEW],
         )
         (self.tmpdir / "brief.md").write_text("# brief\n", encoding="utf-8")
-        (self.tmpdir / "run.md").write_text(
-            complete_log() + "\n" + complete_log("REVIEW"), encoding="utf-8"
-        )
+        self.write_run(complete_log() + "\n" + complete_log("REVIEW"))
         (self.tmpdir / "references").mkdir(exist_ok=True)
+        self.approve_execution()
         self.run_cmd(
             ["set", str(self.csv_path), "T001", "--state", "done", "--commit", "no-change"]
         )
@@ -463,16 +502,6 @@ class WorklineCsvTests(unittest.TestCase):
         self.run_cmd(
             ["set", str(self.csv_path), "REVIEW", "--state", "done", "--commit", "no-change"]
         )
-        for gate, status in [
-            ("materials", "CONFIRMED"),
-            ("prd-review", "PASS"),
-            ("tasks-review", "PASS"),
-            ("execute", "CONFIRMED"),
-        ]:
-            extra = ["--keep-downstream"] if gate == "prd-review" else []
-            self.run_cmd(
-                ["gates-set", str(self.tmpdir), "--gate", gate, "--status", status, *extra]
-            )
         code, out, err = self.run_cmd(["archive-check", str(self.csv_path)])
         self.assertEqual(code, 0, err)
         self.assertIn("archive-check passed", out)
@@ -499,11 +528,120 @@ class WorklineCsvTests(unittest.TestCase):
         csv_path = repo / "tasks.csv"
         write_csv(csv_path, [task(id="T001", state="doing"), REVIEW])
         (repo / "prd.md").write_text("### FR-1 x\n", encoding="utf-8")
-        (repo / "run.md").write_text(complete_log(), encoding="utf-8")
+        self.write_run(complete_log(), repo)
+        self.approve_execution(repo)
         code, _, err = self.run_cmd(
             ["set", str(csv_path), "T001", "--state", "done", "--commit", digest[:12]]
         )
         self.assertEqual(code, 0, err)
+
+    def test_gate_order_and_artifact_freshness_are_enforced(self) -> None:
+        write_csv(self.csv_path, [task(id="T001"), REVIEW])
+        code, _, err = self.run_cmd(
+            [
+                "gates-set",
+                str(self.tmpdir),
+                "--gate",
+                "tasks-review",
+                "--status",
+                "PASS",
+                "--actor",
+                "same-session",
+            ]
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("prd-review", err)
+
+        self.approve_execution()
+        (self.tmpdir / "prd.md").write_text("### FR-1 changed\n", encoding="utf-8")
+        code, _, err = self.run_cmd(
+            [
+                "require-gates",
+                str(self.tmpdir),
+                "--require",
+                "materials=CONFIRMED,WAIVED",
+                "--require",
+                "prd-review=PASS",
+                "--require",
+                "tasks-review=PASS",
+                "--require",
+                "execute=CONFIRMED",
+            ]
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("prd-review is stale", err)
+
+    def test_task_plan_change_invalidates_review_and_execute(self) -> None:
+        write_csv(self.csv_path, [task(id="T001"), REVIEW])
+        self.approve_execution()
+        rows = M.read_rows(self.csv_path)
+        rows[0]["description"] = "changed after approval"
+        write_csv(self.csv_path, rows)
+        code, _, err = self.run_cmd(
+            ["require-gates", str(self.tmpdir), "--require", "execute=CONFIRMED"]
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("tasks-review is stale", err)
+
+    def test_set_rejects_unsatisfied_dependencies(self) -> None:
+        write_csv(
+            self.csv_path,
+            [task(id="T001"), task(id="T002", depends_on="T001"), REVIEW],
+        )
+        self.approve_execution()
+        code, _, err = self.run_cmd(
+            ["set", str(self.csv_path), "T002", "--state", "doing"]
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("dependencies are not satisfied", err)
+
+    def test_review_refs_do_not_cover_requirements(self) -> None:
+        write_csv(
+            self.csv_path,
+            [task(id="T001", refs="references/input.md"), task(id="REVIEW", refs="FR-1")],
+        )
+        _, out, _ = self.run_cmd(["validate", str(self.csv_path)])
+        self.assertIn("fr-uncovered", out)
+
+    def test_archive_blocks_dangling_refs(self) -> None:
+        references = self.tmpdir / "references"
+        references.mkdir(exist_ok=True)
+        material = references / "input.md"
+        material.write_text("input\n", encoding="utf-8")
+        write_csv(
+            self.csv_path,
+            [
+                task(id="T001", state="done", commit="no-change", refs="FR-1 references/input.md"),
+                task(id="REVIEW", state="done", commit="no-change", refs=""),
+            ],
+        )
+        (self.tmpdir / "brief.md").write_text("# brief\n", encoding="utf-8")
+        self.write_run(complete_log() + "\n" + complete_log("REVIEW"))
+        self.approve_execution()
+        material.unlink()
+        code, _, err = self.run_cmd(["archive-check", str(self.csv_path)])
+        self.assertEqual(code, 1)
+        self.assertIn("refs-not-found", err)
+
+    def test_invalid_task_id_is_rejected(self) -> None:
+        write_csv(self.csv_path, [task(id="bad id"), REVIEW])
+        code, _, err = self.run_cmd(["validate", str(self.csv_path)])
+        self.assertEqual(code, 1)
+        self.assertIn("invalid task id", err)
+
+    def test_ref_paths_cannot_escape_or_use_ambiguous_separators(self) -> None:
+        write_csv(
+            self.csv_path,
+            [
+                task(
+                    id="T001",
+                    refs=r"FR-1 references/../secret evidence/./result references\outside",
+                ),
+                REVIEW,
+            ],
+        )
+        _, out, _ = self.run_cmd(["validate", str(self.csv_path)])
+        self.assertGreaterEqual(out.count("refs-invalid"), 3)
 
 
 if __name__ == "__main__":

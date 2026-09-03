@@ -9,7 +9,7 @@ description: "归档已完成的 Workline 活动目录并沉淀项目知识。Us
 
 确认 Workline 过程文件已闭环，把本次任务产生的可复用项目知识写入 `.workline/notes/`，将活动目录从 `.workline/active/<slug>/` 移动到 `.workline/archive/<YYYY-MM>/<slug>/`，并在归档后提交。
 
-用户必须提供活动目录路径。
+用户必须提供活动目录路径。如果是归档移动后提交失败的重试，也可提供已移动的 archive 目录。
 
 ## 路径约定
 
@@ -35,8 +35,10 @@ python <SKILL_DIR>/scripts/workline_csv.py archive-check .workline/active/<slug>
 4. 所有 `done` 任务的日志完整、commit 可核验。
 5. `run.md`「阶段门禁」中 `materials` 为 `CONFIRMED` 或 `WAIVED`，`prd-review` 与 `tasks-review` 为 `PASS`，`execute` 为 `CONFIRMED`。
 6. 不存在未覆盖的 `FR-` / `NFR-` 编号。
+7. PRD 和任务计划与门禁中保存的产物摘要一致。
+8. `references/` / `evidence/` 的引用合法且实际存在；`REVIEW` 行不能代替普通任务覆盖 FR/NFR。
 
-`verification-weak`、`refs-missing`、`skipped-unblocks` 不阻止归档，但要在输出中列出。
+`verification-weak`、`refs-missing`、`skipped-unblocks` 不阻止归档，但要在输出中列出。`refs-invalid`、`refs-not-found`、`req-id-padded` 会阻止归档。
 
 ## 知识沉淀
 
@@ -110,12 +112,22 @@ mv ".workline/active/<slug>" ".workline/archive/<YYYY-MM>/<slug>"
 
 `references/` 和 `evidence/` 作为过程材料保留在归档目录中，不进入这次提交。
 
+这意味着它们默认只保证当前工作区可追溯，不保证重新克隆后仍可用。需要跨机器审计时，先检查体积和敏感信息，再由用户明确决定把相关材料加入 Git 或外部制品库。
+
 ```powershell
 git add -- ".workline/archive/<YYYY-MM>/<slug>/brief.md" ".workline/archive/<YYYY-MM>/<slug>/prd.md" ".workline/archive/<YYYY-MM>/<slug>/tasks.csv" ".workline/archive/<YYYY-MM>/<slug>/run.md" ".workline/notes/index.md" ".workline/notes/<主题>.md"
 git commit -m "workline: archive <slug>"
 ```
 
 如果归档提交失败，不回滚已经完成的目录移动；停止并报告失败原因，让用户处理 Git 状态后重试提交。
+
+### 移动后恢复
+
+用户重试时如果 active 路径已不存在，但根据 slug 计算出的 archive 路径已存在，视为“移动完成、提交未完成”的恢复入口：
+
+1. 对 archive 目录中的 `tasks.csv` 重跑 `archive-check`。
+2. 查看 Git diff，确认知识条目没有被重复追加。
+3. 只重试“归档提交”，不再移动目录、不重复写 notes。
 
 ## 硬约束
 

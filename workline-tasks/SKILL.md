@@ -42,7 +42,7 @@ python <SKILL_DIR>/scripts/workline_csv.py require-gates .workline/active/<slug>
 
 | 字段 | 说明 |
 | --- | --- |
-| `id` | 任务 ID，如 `T001`；末行固定为 `REVIEW` |
+| `id` | 任务 ID，必须是 `T` 加至少三位数字，如 `T001`；末行固定为 `REVIEW` |
 | `depends_on` | 依赖任务 ID，多个用空格分隔；普通任务不得依赖 `REVIEW`，`REVIEW` 行留空 |
 | `mode` | `AFK` 可自动执行；`HITL` 需要人工、实机、账号或关键确认 |
 | `title` | 简短任务标题，必填 |
@@ -81,7 +81,7 @@ python <SKILL_DIR>/scripts/workline_csv.py require-gates .workline/active/<slug>
 FR-2 NFR-1 references/import-format.md
 ```
 
-不要写源码路径，也不要写成 `FR-01`。校验器会对非法项输出 `refs-invalid`，对缺失的 `references/` 文件输出 `refs-not-found`。
+不要写源码路径，也不要写成 `FR-01`。路径中禁止 `.` / `..` 跳转。校验器会对非法项输出 `refs-invalid`，对缺失的 `references/` 或 `evidence/` 路径输出 `refs-not-found`。
 
 `refs` 为空会产生 `refs-missing` warning。确实不需要任何材料的任务，用 `--allow-empty-refs` 豁免校验。
 
@@ -124,6 +124,8 @@ python <SKILL_DIR>/scripts/workline_csv.py validate .workline/active/<slug>/task
 ## REVIEW 行
 
 `REVIEW` 行必须是最后一行，`depends_on` 留空；它隐式依赖全部任务。由执行阶段负责最终审计，不承担实现工作。
+
+`REVIEW` 行的 refs 不计入 FR/NFR 覆盖，防止用最终审计行代替真正的实现任务。
 
 ## 交付前自检
 

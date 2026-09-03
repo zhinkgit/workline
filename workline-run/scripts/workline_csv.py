@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import os
 import re
@@ -33,6 +34,7 @@ HEADERS = [
     "refs",
     "notes",
 ]
+PLAN_FIELDS = ("id", "depends_on", "mode", "title", "description", "verification")
 
 GATE_IDS = ("materials", "prd-review", "tasks-review", "execute")
 GATE_STATUSES = {
@@ -65,6 +67,15 @@ FUNCTION_HEADING_RE = re.compile(r"^##\s+功能要求\s*$", re.MULTILINE)
 NEXT_H2_RE = re.compile(r"^##\s+", re.MULTILINE)
 COMMAND_HINT_RE = re.compile(r"`[^`]+`")
 REF_TOKEN_RE = re.compile(r"^(?:(?:FR|NFR)-[1-9]\d*|references/\S+|evidence/\S+)$")
+TASK_ID_RE = re.compile(r"^T\d{3,}$")
+BLOCKING_WARNING_CODES = {
+    "fr-headings-missing",
+    "fr-uncovered",
+    "nfr-uncovered",
+    "refs-invalid",
+    "refs-not-found",
+    "req-id-padded",
+}
 RUN_FIELD_RE = {
     "实现": re.compile(r"^-\s*实现：\s*(\S.*)$", re.MULTILINE),
     "验证": re.compile(r"^-\s*验证：\s*(\S.*)$", re.MULTILINE),
@@ -83,6 +94,33 @@ class WorklineCsvError(Exception):
 
 def now_iso() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def file_sha256(path: Path) -> str:
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except FileNotFoundError:
+        raise WorklineCsvError(f"required artifact not found: {path}") from None
+    except OSError as exc:
+        raise WorklineCsvError(f"cannot read artifact {path}: {exc}") from exc
+
+
+def task_plan_digest(rows: list[dict[str, str]]) -> str:
+    plan: list[dict[str, object]] = []
+    for row in rows:
+        item: dict[str, object] = {field: row[field] for field in PLAN_FIELDS}
+        item["refs"] = [
+            token for token in split_refs(row["refs"]) if not token.startswith("evidence/")
+        ]
+        plan.append(item)
+    payload = json.dumps(plan, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def task_plan_digest_from_path(path: Path) -> str:
+    rows = read_rows(path)
+    validate_rows(rows)
+    return task_plan_digest(rows)
 
 
 def write_text_atomic(path: Path, text: str) -> None:
@@ -162,6 +200,15 @@ def split_deps(value: str) -> list[str]:
 
 def split_refs(value: str) -> list[str]:
     return [item for item in value.split() if item]
+
+
+def ref_path_is_safe(token: str) -> bool:
+    parts = token.split("/")
+    return (
+        "\\" not in token
+        and len(parts) >= 2
+        and all(part not in {"", ".", ".."} for part in parts)
+    )
 
 
 def dep_satisfied(row: dict[str, str]) -> bool:
@@ -271,6 +318,10 @@ def validate_rows(rows: list[dict[str, str]]) -> None:
             raise WorklineCsvError(f"row {index} has empty id")
         if task_id in seen:
             raise WorklineCsvError(f"duplicate id: {task_id}")
+        if task_id != "REVIEW" and not TASK_ID_RE.fullmatch(task_id):
+            raise WorklineCsvError(
+                f"{task_id}: invalid task id; expected T followed by at least three digits"
+            )
         seen.add(task_id)
         ids.append(task_id)
 
@@ -394,6 +445,7 @@ def default_gate_rows() -> list[dict[str, str]]:
             "status": GATE_DEFAULT_STATUS[gate_id],
             "at": "",
             "actor": "",
+            "digest": "",
             "notes": "",
         }
         for gate_id in GATE_IDS
@@ -417,8 +469,8 @@ def render_gate_section(rows: list[dict[str, str]]) -> str:
     lines = [
         "## 阶段门禁",
         "",
-        "| 门 | 状态 | 时间 | 审查方 | 备注 |",
-        "| --- | --- | --- | --- | --- |",
+        "| 门 | 状态 | 时间 | 审查方 | 产物摘要 | 备注 |",
+        "| --- | --- | --- | --- | --- | --- |",
     ]
     by_id = {row["gate"]: row for row in rows}
     for gate_id in GATE_IDS:
@@ -431,6 +483,7 @@ def render_gate_section(rows: list[dict[str, str]]) -> str:
                     _gate_cell(row.get("status", "")),
                     _gate_cell(row.get("at", "")),
                     _gate_cell(row.get("actor", "")),
+                    _gate_cell(row.get("digest", "")),
                     _gate_cell(row.get("notes", "")),
                 ]
             )
@@ -476,13 +529,17 @@ def parse_gate_rows(text: str) -> list[dict[str, str]]:
         if gate_id in seen:
             raise WorklineCsvError(f"duplicate gate: {gate_id}")
         seen.add(gate_id)
+        # 兼容旧的五列门禁表；旧 PASS 因无摘要会被判为过期。
+        digest = cells[4] if len(cells) >= 6 else ""
+        notes = cells[5] if len(cells) >= 6 else cells[4]
         parsed.append(
             {
                 "gate": gate_id,
                 "status": status,
                 "at": cells[2],
                 "actor": cells[3],
-                "notes": cells[4],
+                "digest": digest,
+                "notes": notes,
             }
         )
     missing = [gate_id for gate_id in GATE_IDS if gate_id not in seen]
@@ -526,6 +583,72 @@ def find_gate(rows: list[dict[str, str]], gate_id: str) -> dict[str, str]:
         if row["gate"] == gate_id:
             return row
     raise WorklineCsvError(f"unknown gate: {gate_id}")
+
+
+def reset_gate(rows: list[dict[str, str]], gate_id: str, reason: str) -> None:
+    row = find_gate(rows, gate_id)
+    row["status"] = GATE_DEFAULT_STATUS[gate_id]
+    row["at"] = ""
+    row["actor"] = ""
+    row["digest"] = ""
+    row["notes"] = reason
+
+
+def artifact_digest(active_dir: Path, gate_id: str) -> str:
+    if gate_id == "prd-review":
+        return file_sha256(active_dir / "prd.md")
+    if gate_id in {"tasks-review", "execute"}:
+        return task_plan_digest_from_path(active_dir / "tasks.csv")
+    return ""
+
+
+def gate_chain_errors(rows: list[dict[str, str]], active_dir: Path) -> list[str]:
+    by_id = {row["gate"]: row for row in rows}
+    errors: list[str] = []
+
+    if by_id["prd-review"]["status"] == "PASS":
+        if by_id["materials"]["status"] not in {"CONFIRMED", "WAIVED"}:
+            errors.append("prd-review=PASS requires materials=CONFIRMED or WAIVED")
+    if by_id["tasks-review"]["status"] == "PASS":
+        if by_id["prd-review"]["status"] != "PASS":
+            errors.append("tasks-review=PASS requires prd-review=PASS")
+    if by_id["execute"]["status"] == "CONFIRMED":
+        if by_id["tasks-review"]["status"] != "PASS":
+            errors.append("execute=CONFIRMED requires tasks-review=PASS")
+
+    for gate_id, active_status in (
+        ("prd-review", "PASS"),
+        ("tasks-review", "PASS"),
+        ("execute", "CONFIRMED"),
+    ):
+        row = by_id[gate_id]
+        if row["status"] != active_status:
+            continue
+        expected = artifact_digest(active_dir, gate_id)
+        if not row.get("digest"):
+            errors.append(f"{gate_id} has no artifact digest; review or confirm it again")
+        elif row["digest"] != expected:
+            errors.append(f"{gate_id} is stale because its reviewed artifact changed")
+    return errors
+
+
+def require_execution_gates(active_dir: Path) -> None:
+    rows = read_gates(active_dir / "run.md")
+    errors = gate_chain_errors(rows, active_dir)
+    required = {
+        "materials": {"CONFIRMED", "WAIVED"},
+        "prd-review": {"PASS"},
+        "tasks-review": {"PASS"},
+        "execute": {"CONFIRMED"},
+    }
+    by_id = {row["gate"]: row for row in rows}
+    for gate_id, allowed in required.items():
+        if by_id[gate_id]["status"] not in allowed:
+            errors.append(
+                f"{gate_id} status is {by_id[gate_id]['status']!r}, required one of {sorted(allowed)}"
+            )
+    if errors:
+        raise WorklineCsvError("execution gate check failed:\n- " + "\n- ".join(errors))
 
 
 def parse_require_item(item: str) -> tuple[str, set[str]]:
@@ -678,7 +801,10 @@ def build_warnings(
                         "message": f"refs 含带前导零的编号 {token}，无法匹配 FR-1 / NFR-1",
                     }
                 )
-            elif not REF_TOKEN_RE.fullmatch(token):
+            elif not REF_TOKEN_RE.fullmatch(token) or (
+                token.startswith(("references/", "evidence/"))
+                and not ref_path_is_safe(token)
+            ):
                 warnings.append(
                     {
                         "code": "refs-invalid",
@@ -688,13 +814,13 @@ def build_warnings(
                         ),
                     }
                 )
-            elif token.startswith("references/"):
+            elif token.startswith(("references/", "evidence/")):
                 if not (cwd / token).exists():
                     warnings.append(
                         {
                             "code": "refs-not-found",
                             "task_id": task_id,
-                            "message": f"材料不存在：{token}",
+                            "message": f"引用路径不存在：{token}",
                         }
                     )
 
@@ -721,7 +847,11 @@ def build_coverage_warnings(
 
     covered: set[str] = set()
     for row in rows:
-        covered.update(REQ_REF_RE.findall(row["refs"]))
+        if row["id"] == "REVIEW":
+            continue
+        covered.update(
+            token for token in split_refs(row["refs"]) if REQ_REF_RE.fullmatch(token)
+        )
 
     def sort_key(item: str) -> tuple[str, int]:
         kind, _, number = item.partition("-")
@@ -745,6 +875,7 @@ def find_row(rows: list[dict[str, str]], task_id: str) -> dict[str, str]:
 
 
 def validate_transition(
+    rows: list[dict[str, str]],
     row: dict[str, str],
     updates: dict[str, str],
     csv_path: Path,
@@ -764,6 +895,27 @@ def validate_transition(
         )
     if row["state"] == "todo" and new_state == "done":
         raise WorklineCsvError("cannot change state directly from todo to done; set doing first")
+
+    if new_state in {"doing", "done"}:
+        if row["id"] == "REVIEW":
+            unfinished = [
+                item["id"] for item in rows[:-1] if not dep_satisfied(item)
+            ]
+            if unfinished:
+                raise WorklineCsvError(
+                    "REVIEW cannot start before all tasks are closed: " + ", ".join(unfinished)
+                )
+        else:
+            by_id = {item["id"]: item for item in rows}
+            unmet = [
+                dep
+                for dep in split_deps(row["depends_on"])
+                if not dep_satisfied(by_id[dep])
+            ]
+            if unmet:
+                raise WorklineCsvError(
+                    f"{row['id']}: dependencies are not satisfied: " + ", ".join(unmet)
+                )
 
     effective_notes = updates.get("notes", row["notes"])
     if new_state in EXCEPTION_STATES and not effective_notes.strip():
@@ -872,7 +1024,10 @@ def command_set(args: argparse.Namespace) -> int:
     if not updates:
         raise WorklineCsvError("no updates provided")
 
-    validate_transition(row, updates, path, force=args.force)
+    new_state = updates.get("state", row["state"])
+    if args.state is not None and new_state != "todo":
+        require_execution_gates(path.parent)
+    validate_transition(rows, row, updates, path, force=args.force)
     row.update(updates)
     validate_rows(rows)
     write_rows_atomic(path, rows)
@@ -954,6 +1109,7 @@ def command_next(args: argparse.Namespace) -> int:
 
 def command_add(args: argparse.Namespace) -> int:
     path = Path(args.csv_path)
+    require_execution_gates(path.parent)
     rows = validate_file(path, check_done=False)
     task_id = args.task_id
     if task_id == "REVIEW":
@@ -972,10 +1128,21 @@ def command_add(args: argparse.Namespace) -> int:
         "refs": args.refs or "",
         "notes": args.notes or "",
     }
+    review = rows[-1]
+    review["state"] = "todo"
+    review["commit"] = ""
+    review["notes"] = f"reset after adding {task_id}"
     rows.insert(-1, new_row)
     validate_rows(rows)
     write_rows_atomic(path, rows)
+
+    gate_path = path.parent / "run.md"
+    gate_rows = read_gates(gate_path)
+    reset_gate(gate_rows, "tasks-review", f"reset after adding {task_id}")
+    reset_gate(gate_rows, "execute", f"reset after adding {task_id}")
+    write_gates(gate_path, gate_rows)
     print(f"OK: added {task_id}")
+    print("NOTICE: tasks-review and execute were reset; REVIEW returned to todo")
     print_warnings(build_warnings(rows, path))
     return 0
 
@@ -998,7 +1165,7 @@ def command_gates_set(args: argparse.Namespace) -> int:
             rows = read_gates(path)
         except WorklineCsvError as exc:
             message = str(exc)
-            if "缺少 ## 阶段门禁" in message:
+            if "缺少 ## 阶段门禁" in message and args.init:
                 rows = default_gate_rows()
             else:
                 raise
@@ -1011,26 +1178,80 @@ def command_gates_set(args: argparse.Namespace) -> int:
             f"{gate_id}: invalid status {args.status!r}; "
             f"expected one of {sorted(GATE_STATUSES[gate_id])}"
         )
+    if args.status != GATE_DEFAULT_STATUS[gate_id] and not (args.actor or "").strip():
+        raise WorklineCsvError(f"{gate_id}={args.status} requires --actor")
+
+    by_id = {item["gate"]: item for item in rows}
+    active_dir = path.parent
+    if gate_id == "prd-review" and args.status == "PASS":
+        if by_id["materials"]["status"] not in {"CONFIRMED", "WAIVED"}:
+            raise WorklineCsvError(
+                "cannot set prd-review=PASS before materials is CONFIRMED or WAIVED"
+            )
+    if gate_id == "tasks-review" and args.status == "PASS":
+        if by_id["prd-review"]["status"] != "PASS":
+            raise WorklineCsvError("cannot set tasks-review=PASS before prd-review=PASS")
+        stale = [
+            item
+            for item in gate_chain_errors(rows, active_dir)
+            if item.startswith("prd-review")
+        ]
+        if stale:
+            raise WorklineCsvError("cannot pass tasks-review:\n- " + "\n- ".join(stale))
+        task_path = active_dir / "tasks.csv"
+        task_rows = validate_file(task_path, check_done=True)
+        blocking = [
+            item
+            for item in build_warnings(task_rows, task_path)
+            if item["code"] in BLOCKING_WARNING_CODES
+        ]
+        if blocking:
+            raise WorklineCsvError(
+                "cannot pass tasks-review with blocking warnings:\n- "
+                + "\n- ".join(
+                    f"{item['code']}: {item['task_id']} - {item['message']}"
+                    for item in blocking
+                )
+            )
+    if gate_id == "execute" and args.status == "CONFIRMED":
+        stale = [
+            item
+            for item in gate_chain_errors(rows, active_dir)
+            if not item.startswith("execute")
+        ]
+        if by_id["tasks-review"]["status"] != "PASS" or stale:
+            details = stale or ["tasks-review is not PASS"]
+            raise WorklineCsvError("cannot confirm execute:\n- " + "\n- ".join(details))
+
     row = find_gate(rows, gate_id)
+    previous_status = row["status"]
+    previous_digest = row.get("digest", "")
+    new_digest = (
+        artifact_digest(active_dir, gate_id)
+        if args.status in {"PASS", "CONFIRMED"}
+        else ""
+    )
+    if gate_id == "prd-review" and args.status == "PASS" and args.keep_downstream:
+        if previous_status != "PASS" or not previous_digest or previous_digest != new_digest:
+            raise WorklineCsvError(
+                "--keep-downstream requires an existing current prd-review=PASS for unchanged prd.md"
+            )
     row["status"] = args.status
     row["at"] = now_iso()
     row["actor"] = args.actor or ""
+    row["digest"] = new_digest
     if args.notes is not None:
         row["notes"] = args.notes
 
-    if gate_id == "prd-review" and args.status == "PASS" and not args.keep_downstream:
+    if gate_id == "materials" and args.status != previous_status:
+        for downstream in ("prd-review", "tasks-review", "execute"):
+            reset_gate(rows, downstream, f"reset after materials changed to {args.status}")
+    if gate_id == "prd-review" and not args.keep_downstream:
         for downstream in ("tasks-review", "execute"):
-            child = find_gate(rows, downstream)
-            child["status"] = GATE_DEFAULT_STATUS[downstream]
-            child["at"] = ""
-            child["actor"] = ""
-            child["notes"] = "reset after prd-review PASS"
-    if gate_id == "tasks-review" and args.status in {"REVISE", "BLOCKED", "未审查"}:
-        child = find_gate(rows, "execute")
-        child["status"] = "未确认"
-        child["at"] = ""
-        child["actor"] = ""
-        child["notes"] = f"reset after tasks-review {args.status}"
+            reset_gate(rows, downstream, f"reset after prd-review {args.status}")
+    if gate_id == "tasks-review":
+        if args.status != "PASS" or previous_status != "PASS" or previous_digest != new_digest:
+            reset_gate(rows, "execute", f"reset after tasks-review {args.status}")
 
     write_gates(path, rows)
     print(f"OK: {gate_id}={args.status}")
@@ -1042,6 +1263,7 @@ def command_require_gates(args: argparse.Namespace) -> int:
     rows = read_gates(path)
     by_id = {row["gate"]: row for row in rows}
     failures: list[str] = []
+    failures.extend(gate_chain_errors(rows, path.parent))
     for item in args.require:
         gate_id, allowed = parse_require_item(item)
         actual = by_id[gate_id]["status"]
@@ -1093,6 +1315,7 @@ def command_archive_check(args: argparse.Namespace) -> int:
     try:
         gate_rows = read_gates(csv_path.parent / "run.md")
         by_id = {row["gate"]: row for row in gate_rows}
+        errors.extend(gate_chain_errors(gate_rows, csv_path.parent))
         if by_id["prd-review"]["status"] != "PASS":
             errors.append("prd-review is not PASS")
         if by_id["tasks-review"]["status"] != "PASS":
@@ -1107,7 +1330,7 @@ def command_archive_check(args: argparse.Namespace) -> int:
     blocking_warnings = [
         warning
         for warning in warnings
-        if warning["code"] in {"fr-headings-missing", "fr-uncovered", "nfr-uncovered"}
+        if warning["code"] in BLOCKING_WARNING_CODES
     ]
     if blocking_warnings:
         errors.extend(

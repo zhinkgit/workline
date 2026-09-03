@@ -55,11 +55,11 @@ workline/
 
 | Skill | 职责 | 交接点 |
 | --- | --- | --- |
-| `workline-init` | 创建 `.workline/active/<timestamp-slug>/`、`brief.md`、带「阶段门禁」的 `run.md` 和空的 `references/` | 用户收集材料后交给 `$workline-grill` |
-| `workline-grill` | 分诊需求规模、评估材料充分性、逐问逐答澄清并生成带 FR/NFR 编号的 `prd.md` | 必须交给 `$workline-review` 审查 PRD |
+| `workline-init` | 建目录前判断是否直接改；需要 Workline 时创建活动目录并把粗需求写入 `brief.md` | 用户收集材料后交给 `$workline-grill` |
+| `workline-grill` | 评估材料充分性、逐问逐答完整澄清并生成带 FR/NFR 编号的 `prd.md` | 必须交给 `$workline-review` 审查 PRD |
 | `workline-review` | 独立复核 `prd.md` 或 `tasks.csv`，结论写入 `run.md` 的「阶段门禁」 | 必审一次；换 agent 再审是可选的第二次 |
 | `workline-tasks` | 在 `prd-review=PASS` 之后拆分任务，生成并校验 `tasks.csv` | 必须交给 `$workline-review` 审查任务表 |
-| `workline-run` | 在 `tasks-review=PASS` 且 `execute=CONFIRMED` 之后按 CSV 执行 | 产出已更新的 `tasks.csv` 和 `run.md` |
+| `workline-run` | 四扇门按顺序通过且产物摘要仍有效后，按 CSV 依赖执行 | 产出已更新的 `tasks.csv` 和 `run.md` |
 | `workline-archive` | `archive-check` 通过后沉淀知识，再把活动目录移动到 archive | 归档核心过程文件和新增知识条目 |
 
 各 Skill 文档中的 `<SKILL_DIR>` 指该 SKILL.md 所在目录的绝对路径。Skill 安装位置随平台不同（`.claude/skills`、`.cursor`、`.codex` 等），命令示例一律不假设当前工作目录下存在 skill 源码目录。
@@ -89,7 +89,9 @@ workline/
 
 活动目录命名为 `YYYY-MM-DD-HHMM-brief-slug`，归档按年月分组。slug 由粗需求自动生成，支持中英文混合，在词边界截断到 40 字符以内；`--slug` 显式指定时优先使用它。
 
-`brief.md` 由 `$workline-init` 基于模板创建，脚本只填充创建时间和目录标题，其余内容由用户手动填写。`run.md` 同时创建，内含「阶段门禁」表，四扇门初始为未确认 / 未审查。`references/` 默认创建为空目录，由用户主动放入 PRD / grill 阶段的输入材料。放入什么、为什么放，在 `brief.md` 的登记表里写清楚。
+`$workline-init` 先判断是否属于一轮内可实现验证的单点修改。这类需求直接处理，不创建活动目录。其它需求一旦初始化，就统一走完整 Workline，`grill` 不再二次分诊。
+
+`brief.md` 由 `$workline-init` 基于模板创建，脚本会填充创建时间、目录标题和用户已给出的原始粗需求。`run.md` 同时创建，内含「阶段门禁」表，四扇门初始为未确认 / 未审查。`references/` 默认创建为空目录，由用户主动放入 PRD / grill 阶段的输入材料。放入什么、为什么放，在 `brief.md` 的登记表里写清楚。
 
 `evidence/` 是执行阶段的可选产物目录，只在任务自然产生构建日志、截图、配置快照、部署包、板端烟测记录等可复查产物时才创建，目录名为 `evidence/<任务 ID>-<短名>/`，内部结构自便，路径写进任务的 `refs`。
 
@@ -110,12 +112,12 @@ workline/
 ```md
 ## 阶段门禁
 
-| 门 | 状态 | 时间 | 审查方 | 备注 |
-| --- | --- | --- | --- | --- |
-| materials | 未确认 |  |  |  |
-| prd-review | 未审查 |  |  |  |
-| tasks-review | 未审查 |  |  |  |
-| execute | 未确认 |  |  |  |
+| 门 | 状态 | 时间 | 审查方 | 产物摘要 | 备注 |
+| --- | --- | --- | --- | --- | --- |
+| materials | 未确认 |  |  |  |  |
+| prd-review | 未审查 |  |  |  |  |
+| tasks-review | 未审查 |  |  |  |  |
+| execute | 未确认 |  |  |  |  |
 ```
 
 | 门 | 允许的状态 | 谁写入 | 谁检查 |
@@ -125,7 +127,11 @@ workline/
 | `tasks-review` | `未审查` / `PASS` / `REVISE` / `BLOCKED` | `$workline-review` | `$workline-run`、`$workline-archive` |
 | `execute` | `未确认` / `CONFIRMED` | `$workline-review` 或 `$workline-run` | `$workline-run`、`$workline-archive` |
 
-`$workline-review` 有两种用法：grill 之后和 tasks 之后各**必审一次**（当前会话即可）；用户如果还想换一个 agent 再审，再调一次，后写覆盖先写。`prd-review` 写成 `PASS` 时，脚本默认重置 `tasks-review` 和 `execute`。只有 PRD 加审且正文未改时才用 `--keep-downstream`。
+`prd-review=PASS` 自动记录 `prd.md` 的 SHA-256；`tasks-review=PASS` 和 `execute=CONFIRMED` 记录任务计划摘要。任务计划摘要包含任务定义和初始材料 refs，不包含执行期的 `state/commit/notes` 和 evidence refs。下一阶段会重算摘要，产物改变后的旧 PASS 会被拒绝。
+
+`tasks-review=PASS` 还会拒绝需求未覆盖、非法/缺失 refs 和前导零编号等硬 warning，不会把它们留到归档时才发现。
+
+`$workline-review` 有两种用法：grill 之后和 tasks 之后各**必审一次**（当前会话即可）；用户如果还想换一个 agent 再审，再调一次，后写覆盖先写。`prd-review` 写成 `PASS` 时，脚本默认重置 `tasks-review` 和 `execute`。只有 PRD 加审且摘要证明正文未改时才允许 `--keep-downstream`。
 
 对话里说 `PASS` 不算过门。下一阶段只认 `run.md` 的「阶段门禁」。
 
@@ -168,6 +174,8 @@ id,depends_on,mode,title,description,verification,state,commit,refs,notes
 
 `REVIEW` 行必须是最后一行，`depends_on` 留空。它隐式依赖全部任务，中途新增任务不需要回来修改这一行。新增任务用 `add` 子命令，不要手改 CSV。
 
+`add` 只用于执行中发现的 PRD 内漏拆任务。新增后脚本会把 `REVIEW` 退回 `todo`，并重置 `tasks-review` 和 `execute`；新计划重新审查、用户再确认后才能继续。
+
 ## refs 是加载清单
 
 `refs` 决定执行某条任务时加载哪些材料，不是自由文本备注。只允许三类，空格分隔：
@@ -196,11 +204,11 @@ python <SKILL_DIR>/scripts/workline_csv.py require-gates <active-dir> --require 
 python <SKILL_DIR>/scripts/workline_csv.py archive-check <tasks.csv>
 ```
 
-`validate` 检查结构：表头、状态枚举、标题/描述/验证非空、`commit` 格式、依赖存在、普通任务不依赖 `REVIEW`、无自依赖、无依赖环、`REVIEW` 位置与空依赖。`state=done` 时还硬检查：`run.md` 对应小节含非空的「实现 / 验证 / 输出」；commit 为空且无 notes 会失败；非 `no-change` 的哈希必须存在于 git。结构或收口错误退出码为 1。
+`validate` 检查结构：表头、`T` 加至少三位数字的任务 ID、状态枚举、标题/描述/验证非空、`commit` 格式、依赖存在、普通任务不依赖 `REVIEW`、无自依赖、无依赖环、`REVIEW` 位置与空依赖。`state=done` 时还硬检查：`run.md` 对应小节含非空的「实现 / 验证 / 输出」；commit 为空且无 notes 会失败；非 `no-change` 的哈希必须存在于 git。结构或收口错误退出码为 1。
 
 `next` 在可执行任务里优先返回 AFK，避免 HITL 等人挡住独立的自动任务。返回对象带 `hitl` 和 `on_complete`。没有可执行任务时返回 `reason`（`all-closed` 或 `needs-attention`）。
 
-`set` 写入 `state=done` 时有硬门禁：完整日志、可核验的 commit。`todo` 不能直接跳到 `done`。离开 `done` / `skipped` 必须 `--force`。
+`set` 进入执行状态前会重查四扇门和产物摘要，进入 `doing/done` 还会检查依赖。写入 `state=done` 时另有完整日志和可核验 commit 硬门禁。`todo` 不能直接跳到 `done`，离开 `done` / `skipped` 必须 `--force`。
 
 ## Warning 回查
 
@@ -219,11 +227,17 @@ python <SKILL_DIR>/scripts/workline_csv.py archive-check <tasks.csv>
 
 `verification-weak` 只认反引号里的命令，避免 “检查 python 代码” 或 “make sure” 被当成可执行验证。
 
+归档时，`verification-weak`、`refs-missing`、`skipped-unblocks` 保持 warning；`refs-invalid`、`refs-not-found`、`req-id-padded` 和需求未覆盖会直接阻断。`REVIEW` 行的 refs 不参与 FR/NFR 覆盖计算。
+
 ## Git 提交
+
+同一个活动目录只允许一个执行者写入。可选外部审查必须在执行暂停时串行完成；不要让两个 agent 同时调用 `set`、`add` 或 `gates-set`。脚本的原子替换只防半写文件，不提供并行调度。
 
 任务级提交由 `$workline-run` 在每条任务验证通过后自动尝试，提交范围限于当前任务相关的业务代码、测试、文档或配置文件。**不要暂存 `.workline/`。** 工作区里未经本次任务改动的脏文件不得静默纳入提交。生成提交信息前先看一眼 `git log --oneline -5`，融入仓库已有风格。
 
 Workline 过程文件由 `$workline-archive` 在移动到 `.workline/archive/<YYYY-MM>/<slug>/` 后统一提交，范围是 `brief.md`、`prd.md`、`tasks.csv`、`run.md`，加上本次新增或修改的 `.workline/notes/` 文件。`references/` 和 `evidence/` 作为过程材料保留在归档目录中。
+
+`references/` 和 `evidence/` 默认只做本地保留，不会自动进入 Git，因为其中可能有大文件、敏感材料或指向外部仓库的链接。因此 Workline 默认保证“当前工作区可追溯”，不保证克隆后证据仍可用。需要跨机器审计时，归档前必须对相关材料做敏感信息和体积检查，再明确加入 Git 或外部制品库。
 
 ## 模板和脚本
 
@@ -254,8 +268,8 @@ python tools/test_workline_csv.py
 
 ## 推荐步骤
 
-1. 使用 `$workline-init` 创建活动目录，手动填写 `brief.md`，并把参考资料放进 `references/`。
-2. 使用 `$workline-grill` 读取活动目录。它先分诊、评估材料并写入 `materials` 门禁，再逐问逐答生成 `prd.md`，收尾时执行一次 PRD 收敛。
+1. 使用 `$workline-init` 先判断是否直接改。只有进入 Workline 时才创建活动目录和 `brief.md`；用户随后把参考资料放进 `references/`。
+2. 使用 `$workline-grill` 读取活动目录。它评估材料并写入 `materials` 门禁，再走完整的逐问逐答澄清，收尾时执行一次 PRD 收敛。
 3. **必须**使用 `$workline-review` 审查 `prd.md`，把结论写入 `prd-review`。同一会话跑即可。
 4. `PASS` 后使用 `$workline-tasks` 只根据 `prd.md` 生成 `tasks.csv`，运行 CSV 校验并处理全部 warning。
 5. **必须**使用 `$workline-review` 审查 `tasks.csv`，把结论写入 `tasks-review`。`PASS` 后再请求执行确认，写入 `execute`。

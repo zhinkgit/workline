@@ -31,19 +31,7 @@ description: "Workline 需求澄清与 PRD 生成。Use when the user provides a
 python <CSV_SCRIPT> gates-set .workline/active/<slug> --gate materials --status CONFIRMED --actor user --notes "材料已齐"
 ```
 
-找不到脚本时，直接改 `run.md` 里「阶段门禁」表对应行，不得省略 `materials` 这一行。
-
-## 需求分诊
-
-不是所有需求都值得走完整 Workline 流程。读完 `brief.md` 后先判断规模，给出建议并让用户确认：
-
-| 档位 | 判据 | 处理 |
-| --- | --- | --- |
-| 直接改 | 单文件、单点修改，一轮内能实现并验证 | 建议放弃本活动目录直接改，不产出 PRD |
-| 轻量 | 3～5 个任务能覆盖，边界清晰无关键决策待定 | 跳过完整澄清，只写“背景与目标 / 功能要求 / 验收标准”三节，但功能要求仍须 `### FR-<序号>`；写完后进入 `$workline-review`，不要直接进 `$workline-tasks` |
-| 完整 | 多文件改动、涉及接口或数据格式、有待定决策或兼容性风险 | 走完整澄清流程 |
-
-分诊结论写入 `prd.md` 的“背景与目标”一节。用户坚持走完整流程时照办，不反复劝说。
+找不到脚本时停止并报告，不得手改门禁表绕过校验。需要先安装或定位上述任一带脚本的 Workline Skill。
 
 ## 材料充分性评估
 
@@ -88,14 +76,13 @@ python <CSV_SCRIPT> gates-set .workline/active/<slug> --gate materials --status 
 ## 工作流
 
 1. 读取 `brief.md`，不修改 `brief.md`；读取 `references/` 的内容。
-2. 执行需求分诊。
-3. 执行材料充分性评估。
-4. 如果用户要求按审查意见修订 PRD，读取 `prd.md` 中“关键决策与澄清记录”“风险与待确认问题”两张表里已登记的审查结论，以及 `references/` 中的外部审查意见文件。
-5. 使用 `templates/prd.md` 在活动目录下创建或更新草稿态 `prd.md`；将模板中的 `{{title}}` 替换为活动目录名；第一版 `prd.md` 只是工作底稿，不代表澄清完成。
-6. 在内部形成待澄清问题队列，像 `grill-me` 一样沿决策树逐个分支推进。
-7. 每次收到回答后，先更新 `prd.md` 的相关章节和“关键决策与澄清记录”，再继续提出下一个尚未闭环的问题。
-8. 持续推进问题队列，直到满足“PRD 完成条件”。
-9. 收尾前执行一次 PRD 收敛。
+2. 执行材料充分性评估。
+3. 如果用户要求按审查意见修订 PRD，读取 `prd.md` 中“关键决策与澄清记录”“风险与待确认问题”两张表里已登记的审查结论，以及 `references/` 中的外部审查意见文件。
+4. 使用 `templates/prd.md` 在活动目录下创建或更新草稿态 `prd.md`；将模板中的 `{{title}}` 替换为活动目录名；第一版 `prd.md` 只是工作底稿，不代表澄清完成。
+5. 在内部形成待澄清问题队列，像 `grill-me` 一样沿决策树逐个分支推进。
+6. 每次收到回答后，先更新 `prd.md` 的相关章节和“关键决策与澄清记录”，再继续提出下一个尚未闭环的问题。
+7. 持续推进问题队列，直到满足“PRD 完成条件”。
+8. 收尾前执行一次 PRD 收敛。
 
 ## 功能要求编号
 
@@ -145,7 +132,6 @@ python <CSV_SCRIPT> gates-set .workline/active/<slug> --gate materials --status 
 
 完成时说明：
 
-- 分诊结论。
 - `prd.md` 路径和 FR / NFR 编号清单。
 - 已闭环的关键决策。
 - 仍存在但不阻塞任务拆分的风险或待确认问题。

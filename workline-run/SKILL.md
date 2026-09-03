@@ -58,10 +58,12 @@ description: "Workline 长任务执行规则包。Use when the user asks to exec
 每次开始或恢复执行都先运行：
 
 ```bash
-python <SKILL_DIR>/scripts/workline_csv.py require-gates <active-dir> --require tasks-review=PASS --require execute=CONFIRMED
+python <SKILL_DIR>/scripts/workline_csv.py require-gates <active-dir> --require materials=CONFIRMED,WAIVED --require prd-review=PASS --require tasks-review=PASS --require execute=CONFIRMED
 python <SKILL_DIR>/scripts/workline_csv.py validate <tasks.csv>
 python <SKILL_DIR>/scripts/workline_csv.py next <tasks.csv>
 ```
+
+`require-gates` 还会重算 PRD 和任务计划摘要。门禁 PASS 后修改过 PRD 或任务定义，必须回到对应审查阶段。
 
 `execute` 尚未确认时，先请求用户确认，用户同意后再写门禁，然后重新 `require-gates`：
 
@@ -87,7 +89,7 @@ python <SKILL_DIR>/scripts/workline_csv.py gates-set <active-dir> --gate execute
    | `worktree-dirty` | 工作区有非 `.workline` 的脏文件 | 任务级提交不要把它们捎上 |
 
 6. `next` 返回 `{"next": null}` 时按 `reason` 处理：`all-closed` 表示全部闭环；`needs-attention` 按 `detail` 说明并请求用户决策。
-7. `run.md` 由 `$workline-init` 创建。追加任务小节，**不要重写或删除 `## 阶段门禁`**。若文件缺失，停止并回到 init，或用 `gates-set --init` 补回门禁表后再继续。
+7. `run.md` 由 `$workline-init` 创建。追加任务小节，**不要重写或删除 `## 阶段门禁`**。若文件或门禁表缺失，默认停止并回到 init；只有明确执行恢复时才可用 `gates-set --init` 补建，且所有门会从初始状态重新确认。
 
 ## 读取任务
 
@@ -194,7 +196,8 @@ python <SKILL_DIR>/scripts/workline_csv.py set <tasks.csv> T001 --state done --c
 python <SKILL_DIR>/scripts/workline_csv.py add <tasks.csv> T012 --mode AFK --title "..." --description "..." --verification "`pytest`" --refs "FR-2"
 ```
 
-3. 重新 `validate`，在 `run.md` 记录新增依据。`REVIEW` 行不用改。
+3. `add` 会自动把 `REVIEW` 退回 `todo`，并重置 `tasks-review` 和 `execute`。
+4. 重新 `validate`，在 `run.md` 记录新增依据，然后交给 `$workline-review` 重新审查任务计划，用户再确认执行后恢复。
 
 ## REVIEW 行
 
@@ -214,11 +217,12 @@ python <SKILL_DIR>/scripts/workline_csv.py add <tasks.csv> T012 --mode AFK --tit
 
 - `tasks.csv` 始终是计划和状态源。
 - 状态字段通过 `workline_csv.py set` 更新。
-- 没有 `tasks-review=PASS` 和 `execute=CONFIRMED` 不得开工。
+- 四扇门必须按顺序通过，且 PRD / 任务计划摘要必须仍然有效，否则不得开工。
 - 通过结论必须有真实验证依据。
 - 先写完整 `run.md` 小节，再标记 `done`。
 - 任务级提交不得包含 `.workline/`。
 - 执行阶段不扩展需求范围。
+- 同一活动目录只允许一个执行者写入；外部审查与执行必须串行。
 
 ## 输出
 
