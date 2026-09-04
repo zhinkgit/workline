@@ -36,7 +36,7 @@ python <SKILL_DIR>/scripts/workline_csv.py archive-check .workline/active/<slug>
 5. `run.md`「阶段门禁」中 `materials` 为 `CONFIRMED` 或 `WAIVED`，`prd-review` 与 `tasks-review` 为 `PASS`，`execute` 为 `CONFIRMED`。
 6. 不存在未覆盖的 `FR-` / `NFR-` 编号。
 7. PRD 和任务计划与门禁中保存的产物摘要一致。
-8. `references/` / `evidence/` 的引用合法且实际存在；`REVIEW` 行不能代替普通任务覆盖 FR/NFR。
+8. `refs` 中的路径引用合法且实际存在；`REVIEW` 行不能代替普通任务覆盖 FR/NFR。
 
 `refs-missing`、`skipped-unblocks` 不阻止归档，但要在输出中列出。`refs-invalid`、`refs-not-found`、`req-id-padded` 会阻止归档。
 

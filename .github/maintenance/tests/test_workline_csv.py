@@ -278,13 +278,29 @@ class WorklineCsvTests(unittest.TestCase):
     def test_refs_invalid_and_fr_padding(self) -> None:
         write_csv(
             self.csv_path,
-            [task(id="T001", refs="src/main.c FR-01"), REVIEW],
+            [task(id="T001", refs="D:/outside/spec.pdf FR-01"), REVIEW],
         )
         (self.tmpdir / "prd.md").write_text("### FR-1 导入\n### FR-2 校验\n", encoding="utf-8")
         _, out, _ = self.run_cmd(["validate", str(self.csv_path)])
         self.assertIn("refs-invalid", out)
         self.assertIn("req-id-padded", out)
         self.assertIn("fr-uncovered", out)
+
+    def test_repo_relative_refs_resolve_against_project_root(self) -> None:
+        active = self.tmpdir / ".workline" / "active" / "2026-05-28-0915-example"
+        active.mkdir(parents=True)
+        (active / "prd.md").write_text("### FR-1 导入\n", encoding="utf-8")
+        (self.tmpdir / "src").mkdir()
+        (self.tmpdir / "src" / "main.c").write_text("int main(void)\n", encoding="utf-8")
+        csv_path = active / "tasks.csv"
+        write_csv(
+            csv_path,
+            [task(id="T001", refs="FR-1 src/main.c docs/missing.md"), REVIEW],
+        )
+        _, out, _ = self.run_cmd(["validate", str(csv_path)])
+        self.assertNotIn("refs-invalid", out)
+        self.assertIn("引用路径不存在：docs/missing.md", out)
+        self.assertNotIn("引用路径不存在：src/main.c", out)
 
     def test_fr_headings_missing_warning(self) -> None:
         (self.tmpdir / "prd.md").write_text(

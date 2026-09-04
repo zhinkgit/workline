@@ -59,7 +59,7 @@ python <SKILL_DIR>/scripts/workline_csv.py gates .workline/active/<slug>
 
 ## PRD 审查
 
-读取 `brief.md`、`prd.md`、`references/` 一级目录和必要文件；`.workline/notes/index.md` 存在时一并读取，核对 PRD 是否与已沉淀的项目约定冲突。
+读取 `brief.md`、`prd.md`、`references/` 一级目录和必要文件；`brief.md` 的材料清单登记了仓库内相对路径或外部绝对路径时，按需读取这些路径；`.workline/notes/index.md` 存在时一并读取，核对 PRD 是否与已沉淀的项目约定冲突。
 
 检查：
 
@@ -69,7 +69,7 @@ python <SKILL_DIR>/scripts/workline_csv.py gates .workline/active/<slug>
 - 需要单独拆任务的非功能要求是否使用 `### NFR-<序号>`。
 - 验收标准是否可验证，是否能映射到后续任务。
 - 风险与待确认问题是否还有阻塞任务拆分的内容。
-- 关键决策是否有来源，是否能追溯到 `brief.md`、`references/` 或澄清记录。
+- 关键决策是否有来源，是否能追溯到 `brief.md` 登记的材料或澄清记录。外部绝对路径的材料不进 `refs`，其结论必须已固化进 `prd.md`。
 - 是否已完成 PRD 收敛：有没有残留的中途假设、已解决却仍挂着的待确认问题、重复陈述。
 - 是否与 `.workline/notes/` 中已有的项目约定冲突且未说明理由。
 - `run.md` 的 `materials` 是否为 `CONFIRMED` 或 `WAIVED`；仍是 `未确认` 则结论不得为 `PASS`。
@@ -99,7 +99,7 @@ python <SKILL_DIR>/scripts/workline_csv.py validate .workline/active/<slug>/task
 - 是否把 PRD 中未闭环的待确认问题伪装成可执行任务。
 - `mode=AFK/HITL` 是否按判定权标对：命令、Skill 或其他工具能自行给出通过/失败的标 `AFK`；必须人看、人选或人手操作的标 `HITL`。碰到板子本身不是改成 HITL 的理由。`next` 会优先调度独立 AFK，HITL 仍须标对。
 - `verification` 是否写清验证手段和期望结果。手段可以是命令行、Skill 或其他工具，不要求反引号。AFK 的判定必须在无人值守下可完成；写「验证一下」这类无法判定的句子则 `REVISE`。
-- `refs` 是否只含 `FR-` / `NFR-` 编号、`references/` 或 `evidence/` 路径。
+- `refs` 是否只含 `FR-` / `NFR-` 编号，或 `references/`、`evidence/`、仓库内相对路径；不得出现外部绝对路径和 `.` / `..` 跳转。
 - 依赖关系是否反映真实实现顺序。
 - `REVIEW` 行是否最后一行且 `depends_on` 为空。
 - 任务是否保持执行前初始状态；若已有非 `todo` 状态，确认用户是在审查历史任务表还是准备重新执行。

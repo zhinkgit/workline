@@ -45,7 +45,7 @@ description: "Workline 长任务执行规则包。Use when the user asks to exec
 1. 使用 `<active-dir>/tasks.csv` 作为任务表。
 2. 使用 `<active-dir>/prd.md` 作为需求来源。
 3. 使用 `<active-dir>/run.md` 作为门禁和执行日志。
-4. 按当前任务的 `refs` 读取 `<active-dir>/references/` 中的材料。
+4. 按当前任务的 `refs` 读取材料：`references/` 与 `evidence/` 相对活动目录，其它相对路径相对项目根。
 
 如果用户直接给的是 `tasks.csv`：
 
@@ -103,12 +103,13 @@ python <SKILL_DIR>/scripts/workline_csv.py gates-set <active-dir> --gate execute
 | 形式 | 加载动作 |
 | --- | --- |
 | `FR-2` / `NFR-1` | 读 `prd.md` 中对应小节，以及“验收标准”“约束条件”中与之相关的条目 |
-| `references/xxx.md` | 读该文件 |
+| `references/xxx.md` | 读活动目录下的该文件 |
 | `evidence/T00X-xxx/` | 前序任务的产物，需要复查时才读 |
+| `src/driver/uart.c` | 读项目根下的该文件或目录，作为参考材料 |
 
 `refs` 为空时，读 `prd.md` 的“目标”“功能要求”“验收标准”三节作为兜底，并在 `run.md` 中记录这条任务没有材料清单。
 
-需要改哪些源码由你自己搜索定位，不要把源码路径写进 `refs`。
+`refs` 里的仓库内路径是「要读的参考材料」，不是「要改的目标文件」。需要改哪些源码由你自己搜索定位，不要把目标文件补进 `refs`。
 
 ## 普通任务执行
 

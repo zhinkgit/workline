@@ -65,7 +65,9 @@ REQ_REF_RE = re.compile(r"\b(?:FR|NFR)-[1-9]\d*\b")
 PADDED_REQ_REF_RE = re.compile(r"\b(?:FR|NFR)-0\d+\b")
 FUNCTION_HEADING_RE = re.compile(r"^##\s+功能要求\s*$", re.MULTILINE)
 NEXT_H2_RE = re.compile(r"^##\s+", re.MULTILINE)
-REF_TOKEN_RE = re.compile(r"^(?:(?:FR|NFR)-[1-9]\d*|references/\S+|evidence/\S+)$")
+REF_REQ_TOKEN_RE = re.compile(r"^(?:FR|NFR)-[1-9]\d*$")
+ACTIVE_REF_PREFIXES = ("references/", "evidence/")
+WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:")
 TASK_ID_RE = re.compile(r"^T\d{3,}$")
 BLOCKING_WARNING_CODES = {
     "fr-headings-missing",
@@ -205,7 +207,7 @@ def ref_path_is_safe(token: str) -> bool:
     parts = token.split("/")
     return (
         "\\" not in token
-        and len(parts) >= 2
+        and not WINDOWS_DRIVE_RE.match(token)
         and all(part not in {"", ".", ".."} for part in parts)
     )
 
@@ -243,6 +245,14 @@ def detect_cycle(rows: list[dict[str, str]]) -> list[str] | None:
             if found:
                 return found
     return None
+
+
+def project_root(active_dir: Path) -> Path | None:
+    """仓库内相对路径的解析基准：含 .workline/ 的项目根，取不到时退回 git 根。"""
+    for parent in active_dir.resolve().parents:
+        if parent.name == ".workline":
+            return parent.parent
+    return git_repo_root(active_dir)
 
 
 def git_repo_root(cwd: Path) -> Path | None:
@@ -722,6 +732,7 @@ def build_warnings(
     by_id = {row["id"]: row for row in rows}
     prd_text = read_prd_text(csv_path)
     cwd = csv_path.parent
+    root = project_root(cwd)
 
     if prd_text is not None:
         padded_headings = PADDED_REQ_HEADING_RE.findall(prd_text)
@@ -785,21 +796,21 @@ def build_warnings(
                         "message": f"refs 含带前导零的编号 {token}，无法匹配 FR-1 / NFR-1",
                     }
                 )
-            elif not REF_TOKEN_RE.fullmatch(token) or (
-                token.startswith(("references/", "evidence/"))
-                and not ref_path_is_safe(token)
-            ):
+            elif REF_REQ_TOKEN_RE.fullmatch(token):
+                continue
+            elif not ref_path_is_safe(token):
                 warnings.append(
                     {
                         "code": "refs-invalid",
                         "task_id": task_id,
                         "message": (
-                            f"refs 项 {token} 不是 FR/NFR 编号、references/ 或 evidence/ 路径"
+                            f"refs 项 {token} 不是 FR/NFR 编号，也不是合法的相对路径"
                         ),
                     }
                 )
-            elif token.startswith(("references/", "evidence/")):
-                if not (cwd / token).exists():
+            else:
+                base = cwd if token.startswith(ACTIVE_REF_PREFIXES) else root
+                if base is not None and not (base / token).exists():
                     warnings.append(
                         {
                             "code": "refs-not-found",

@@ -7,7 +7,7 @@ description: "Workline 需求澄清与 PRD 生成。Use when the user provides a
 
 ## 目标
 
-对 Workline 活动目录做 `grill-me` 式需求澄清：读取 `brief.md` 和 `references/`，先评估材料是否够用，再持续一问一答压实边界，并把关键结论沉淀到活动目录下的 `prd.md`。
+对 Workline 活动目录做 `grill-me` 式需求澄清：读取 `brief.md` 及其登记的全部材料，先评估材料是否够用，再持续一问一答压实边界，并把关键结论沉淀到活动目录下的 `prd.md`。
 
 ## 入口检查
 
@@ -38,7 +38,7 @@ python <CSV_SCRIPT> gates-set .workline/active/<slug> --gate materials --status 
 提问之前先评估手上的材料够不够，不要在材料不足时用提问向用户索取本该由文件提供的信息。
 
 1. 读取 `.workline/notes/index.md`（存在时），按索引取用与本需求相关的主题文件。这是本代码库已沉淀的约定和坑，优先于重新查证。
-2. 读取 `brief.md` 和 `references/` 全部材料。
+2. 读取 `brief.md`，按「材料清单及用途」表逐条取材料：`references/` 下的直接读；仓库内相对路径按用途读该文件或目录，不要通读整个仓库；外部绝对路径读不到时记为缺口，不要凭印象假设内容。
 3. 按 `brief.md` 中登记的用途，核对每份材料是否真的能支撑对应判断。
 4. 扫描相关源码，判断任务能否在现有材料下推进。
 
@@ -54,7 +54,7 @@ python <CSV_SCRIPT> gates-set .workline/active/<slug> --gate materials --status 
 
 能靠查证解决的，一律不要问用户。
 
-- 仓库、`.workline/notes/`、`brief.md`、`references/` 能回答的事实问题，自己查证后直接写进 `prd.md`，并在“关键决策与澄清记录”的“来源”列写清依据。
+- 仓库、`.workline/notes/`、`brief.md` 及其登记的材料能回答的事实问题，自己查证后直接写进 `prd.md`，并在“关键决策与澄清记录”的“来源”列写清依据。
 - 只问仓库永远回答不了的：产品意图、范围边界、优先级、风险容忍度、期望的验收行为、以及查证后仍然含混的判断。
 - 仓库里已存在某种做法，只是**候选方案和推荐依据，不等于决策**。不得用“现有代码就是这么写的”替代用户确认，尤其在涉及接口、数据格式、删除行为和兼容性时。
 
@@ -75,7 +75,7 @@ python <CSV_SCRIPT> gates-set .workline/active/<slug> --gate materials --status 
 
 ## 工作流
 
-1. 读取 `brief.md`，不修改 `brief.md`；读取 `references/` 的内容。
+1. 读取 `brief.md`，不修改 `brief.md`；读取「材料清单及用途」表登记的材料，包含 `references/` 下的文件和表中登记的其它路径。
 2. 执行材料充分性评估。
 3. 如果用户要求按审查意见修订 PRD，读取 `prd.md` 中“关键决策与澄清记录”“风险与待确认问题”两张表里已登记的审查结论，以及 `references/` 中的外部审查意见文件。
 4. 使用 `templates/prd.md` 在活动目录下创建或更新草稿态 `prd.md`；将模板中的 `{{title}}` 替换为活动目录名；第一版 `prd.md` 只是工作底稿，不代表澄清完成。

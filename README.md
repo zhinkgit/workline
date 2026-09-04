@@ -16,7 +16,7 @@
 
 ### 1. 先把项目所需的物料准备好
 
-完成任务真正需要的东西——参考实现、协议、样例、旧代码、外部意见——由用户主动收集，放到活动目录的 `references/`，并在 `brief.md` 里登记每份用途。
+完成任务真正需要的东西——参考实现、协议、样例、旧代码、外部意见——由用户主动收集，在 `brief.md` 里登记路径和用途。外部零散材料放进活动目录的 `references/`；本仓库已有的文件或目录直接登记相对路径，不必复制。
 
 澄清开始前先评估材料够不够。不够就指出缺口并停下，而不是用提问向用户索取本该由文件提供的信息。材料不足时硬开问，后面所有决策都会漂在口头转述上。
 
@@ -54,7 +54,7 @@ flowchart TD
 
 | 阶段 | Skill | 产物 |
 | --- | --- | --- |
-| 1 备齐物料 | `workline-init` 建目录；你放入 `references/`；`workline-grill` 评估是否够用 | `brief.md`、`references/` |
+| 1 备齐物料 | `workline-init` 建目录；你在 `brief.md` 登记材料路径，外部材料放入 `references/`；`workline-grill` 评估是否够用 | `brief.md`、`references/` |
 | 2 得出方案 | `workline-grill` 逐问并写 PRD；`workline-review` 审查 | `prd.md` |
 | 3 可测步骤 | `workline-tasks` 拆表；`workline-review` 再审；你确认后 `workline-run` 按表执行 | `tasks.csv`、`run.md` |
 | 4 沉淀复用 | `workline-archive` 检查闭环、写 notes、搬进 archive | `.workline/notes/`、`.workline/archive/` |
@@ -73,12 +73,12 @@ flowchart TD
 │       ├── prd.md                  ← 执行方案
 │       ├── tasks.csv               ← 可测步骤和状态
 │       ├── run.md                  ← 阶段门禁 + 执行日志
-│       └── references/             ← 你放入的物料
+│       └── references/             ← 你放入的外部物料（仓库内材料在 brief.md 里登记路径即可）
 └── archive/
     └── 2026-05/                    ← 完成后按月归档
 ```
 
-门禁写在 `run.md`（物料确认 → 方案审查 → 步骤审查 → 执行确认）。下一阶段只认这张表。`tasks.csv` 是执行期唯一状态源；`refs` 指向方案条款和物料，不写源码路径。校验由各 Skill 自带的 `workline_csv.py` 完成，调不到脚本就停止。
+门禁写在 `run.md`（物料确认 → 方案审查 → 步骤审查 → 执行确认）。下一阶段只认这张表。`tasks.csv` 是执行期唯一状态源；`refs` 指向方案条款和物料，不写本任务要改的目标文件。校验由各 Skill 自带的 `workline_csv.py` 完成，调不到脚本就停止。
 
 ### `tasks.csv` 组成
 
@@ -93,7 +93,7 @@ flowchart TD
 | `verification` | 用什么手段、怎样算过。可以是命令行、Skill 或其他工具 |
 | `state` | `todo` → `doing` → `done`；条件不够则 `blocked`，确认跳过则 `skipped` |
 | `commit` | 本步业务提交的哈希，无改动写 `no-change` |
-| `refs` | 执行时加载的材料：`FR-2`、`references/`、`evidence/`，不写源码路径 |
+| `refs` | 执行时加载的材料：`FR-2`、`references/`、`evidence/`、仓库内相对路径；不写外部绝对路径，也不写本任务要改的目标文件 |
 | `notes` | 阻塞、跳过、commit 为空等短备注 |
 
 前 6 列是计划，审查通过后不要改；后 4 列是执行状态。中途加任务用脚本的 `add`，不要手改表头。
@@ -104,7 +104,7 @@ flowchart TD
 
 ```text
 .workline/active/<slug>/
-    brief.md + references/     你放入物料
+    brief.md + references/     你登记并放入物料
             │
             ▼  $workline-grill
         prd.md                 澄清后的执行方案

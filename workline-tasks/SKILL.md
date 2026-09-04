@@ -67,21 +67,24 @@ python <SKILL_DIR>/scripts/workline_csv.py require-gates .workline/active/<slug>
 
 ## refs 是加载清单，不是备注
 
-`refs` 决定执行该任务时要加载哪些材料。只允许三类，空格分隔：
+`refs` 决定执行该任务时要加载哪些材料。只允许四类，空格分隔：
 
-| 形式 | 含义 |
-| --- | --- |
-| `FR-2` / `NFR-1` | `prd.md` 中对应要求小节 |
-| `references/proto-v2.md` | `references/` 下的输入材料 |
-| `evidence/T001-smoke/` | 执行阶段产生的产物目录，由 `--append-refs` 追加 |
+| 形式 | 含义 | 解析基准 |
+| --- | --- | --- |
+| `FR-2` / `NFR-1` | `prd.md` 中对应要求小节 | — |
+| `references/proto-v2.md` | `references/` 下的输入材料 | 活动目录 |
+| `evidence/T001-smoke/` | 执行阶段产生的产物目录，由 `--append-refs` 追加 | 活动目录 |
+| `src/driver/uart.c` | `brief.md` 登记的仓库内材料 | 项目根（含 `.workline/` 的目录） |
 
 示例：
 
 ```text
-FR-2 NFR-1 references/import-format.md
+FR-2 NFR-1 references/import-format.md src/driver/uart.c
 ```
 
-不要写源码路径，也不要写成 `FR-01`。路径中禁止 `.` / `..` 跳转。校验器会对非法项输出 `refs-invalid`，对缺失的 `references/` 或 `evidence/` 路径输出 `refs-not-found`。
+仓库内路径只写「执行时要读的既有材料」，不写本任务要修改的目标文件——改哪些源码由执行者自己定位。
+
+不要写外部绝对路径（`D:/...`、`/opt/...`），也不要写成 `FR-01`。路径中禁止 `.` / `..` 跳转和反斜杠。校验器会对非法项输出 `refs-invalid`，对指向不存在位置的路径输出 `refs-not-found`。`brief.md` 里登记的外部绝对路径材料不能进 `refs`，需要它的结论应已在 PRD 中固化。
 
 `refs` 为空会产生 `refs-missing` warning。确实不需要任何材料的任务，用 `--allow-empty-refs` 豁免校验。
 
