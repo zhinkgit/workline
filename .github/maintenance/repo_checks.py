@@ -19,6 +19,12 @@ SCRIPT_COPIES = [
     "workline-review/scripts/workline_csv.py",
     "workline-archive/scripts/workline_csv.py",
 ]
+REFERENCE_COPIES = [
+    "workline-tasks/REFERENCE.md",
+    "workline-run/REFERENCE.md",
+    "workline-review/REFERENCE.md",
+    "workline-archive/REFERENCE.md",
+]
 
 
 def repository_root() -> Path:
@@ -163,23 +169,30 @@ def check_readme_skills(root: Path) -> list[str]:
     return errors
 
 
-def check_script_copies(root: Path) -> list[str]:
+def check_synced_copies(root: Path, names: list[str], label: str) -> list[str]:
     errors: list[str] = []
-    missing = [name for name in SCRIPT_COPIES if not (root / name).is_file()]
+    missing = [name for name in names if not (root / name).is_file()]
     if missing:
         for name in missing:
-            errors.append(f"missing script copy: {name}")
+            errors.append(f"missing {label} copy: {name}")
         return errors
 
     hashes = {
         name: hashlib.sha256((root / name).read_bytes()).hexdigest()
-        for name in SCRIPT_COPIES
+        for name in names
     }
-    unique = set(hashes.values())
-    if len(unique) != 1:
+    if len(set(hashes.values())) != 1:
         for name, value in hashes.items():
-            errors.append(f"script copy diverged: {value[:16]}  {name}")
+            errors.append(f"{label} copy diverged: {value[:16]}  {name}")
     return errors
+
+
+def check_script_copies(root: Path) -> list[str]:
+    return check_synced_copies(root, SCRIPT_COPIES, "script")
+
+
+def check_reference_copies(root: Path) -> list[str]:
+    return check_synced_copies(root, REFERENCE_COPIES, "reference")
 
 
 def run_checks(root: Path) -> list[str]:
@@ -191,6 +204,7 @@ def run_checks(root: Path) -> list[str]:
         check_markdown_links,
         check_readme_skills,
         check_script_copies,
+        check_reference_copies,
     ]
     for check in checks:
         current = check(root)

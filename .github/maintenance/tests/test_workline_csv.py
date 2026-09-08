@@ -198,7 +198,7 @@ class WorklineCsvTests(unittest.TestCase):
         )
         code, _, err = self.run_cmd(["next", str(self.csv_path)])
         self.assertEqual(code, 1)
-        self.assertIn("done-state checks failed", err)
+        self.assertIn("done 任务收口检查未通过", err)
 
     def test_set_rejects_incomplete_log_and_fake_hash_without_git(self) -> None:
         write_csv(self.csv_path, [task(id="T001", state="doing"), REVIEW])
@@ -226,7 +226,7 @@ class WorklineCsvTests(unittest.TestCase):
             ["set", str(self.csv_path), "T001", "--state", "done", "--commit", "no-change"]
         )
         self.assertEqual(code, 0, err)
-        self.assertIn("OK: updated T001", out)
+        self.assertIn("OK: 已更新 T001", out)
 
     def test_terminal_state_requires_force(self) -> None:
         write_csv(
@@ -252,13 +252,13 @@ class WorklineCsvTests(unittest.TestCase):
             ["set", str(self.csv_path), "T001", "--state", "done", "--commit", "no-change"]
         )
         self.assertEqual(code, 1)
-        self.assertIn("todo to done", err)
+        self.assertIn("todo 不能直接跳到 done", err)
 
     def test_empty_title_rejected(self) -> None:
         write_csv(self.csv_path, [task(id="T001", title=""), REVIEW])
         code, _, err = self.run_cmd(["validate", str(self.csv_path)])
         self.assertEqual(code, 1)
-        self.assertIn("title is required", err)
+        self.assertIn("title 必填", err)
 
     def test_afk_without_backticks_is_valid(self) -> None:
         write_csv(
@@ -349,7 +349,7 @@ class WorklineCsvTests(unittest.TestCase):
         (self.tmpdir / "references").mkdir(exist_ok=True)
         code, _, err = self.run_cmd(["archive-check", str(self.csv_path)])
         self.assertEqual(code, 1)
-        self.assertIn("commit empty", err)
+        self.assertIn("commit 为空", err)
 
     def test_add_inserts_before_review(self) -> None:
         write_csv(self.csv_path, [task(id="T001"), REVIEW])
@@ -513,14 +513,14 @@ class WorklineCsvTests(unittest.TestCase):
         )
         code, out, err = self.run_cmd(["archive-check", str(self.csv_path)])
         self.assertEqual(code, 0, err)
-        self.assertIn("archive-check passed", out)
+        self.assertIn("archive-check 通过", out)
 
         self.run_cmd(
             ["gates-set", str(self.tmpdir), "--gate", "execute", "--status", "未确认"]
         )
         code, _, err = self.run_cmd(["archive-check", str(self.csv_path)])
         self.assertEqual(code, 1)
-        self.assertIn("execute is not CONFIRMED", err)
+        self.assertIn("execute 不是 CONFIRMED", err)
 
     def test_git_hash_accepted_in_real_repo(self) -> None:
         repo = self.tmpdir / "repo"
@@ -578,7 +578,7 @@ class WorklineCsvTests(unittest.TestCase):
             ]
         )
         self.assertEqual(code, 1)
-        self.assertIn("prd-review is stale", err)
+        self.assertIn("prd-review 已失效", err)
 
     def test_task_plan_change_invalidates_review_and_execute(self) -> None:
         write_csv(self.csv_path, [task(id="T001"), REVIEW])
@@ -590,7 +590,107 @@ class WorklineCsvTests(unittest.TestCase):
             ["require-gates", str(self.tmpdir), "--require", "execute=CONFIRMED"]
         )
         self.assertEqual(code, 1)
-        self.assertIn("tasks-review is stale", err)
+        self.assertIn("tasks-review 已失效", err)
+
+    # 以下四条锁住「让工具当规范」的前提：错误消息必须自带完整正确答案。
+    # 消息被削成只说"你错了"而不说"该怎样"时，这些用例失败。
+
+    def test_refs_invalid_message_lists_allowed_forms(self) -> None:
+        write_csv(self.csv_path, [task(id="T001", refs="../evil"), REVIEW])
+        code, out, err = self.run_cmd(["validate", str(self.csv_path)])
+        self.assertEqual(code, 0, err)
+        for fragment in ("FR-2", "references/", "evidence/", ".workline/notes/", "绝对路径"):
+            self.assertIn(fragment, out)
+
+    def test_blocked_message_explains_every_prefix(self) -> None:
+        write_csv(self.csv_path, [task(id="T001"), REVIEW])
+        self.approve_execution()
+        code, _, err = self.run_cmd(
+            ["set", str(self.csv_path), "T001", "--state", "blocked", "--notes", "等一下"]
+        )
+        self.assertEqual(code, 1)
+        for fragment in ("wait-user", "env-missing", "verify-failed", "环境缺失", "验证未通过"):
+            self.assertIn(fragment, err)
+
+    def test_verification_message_says_how_to_write_it(self) -> None:
+        write_csv(self.csv_path, [task(id="T001", verification=""), REVIEW])
+        code, _, err = self.run_cmd(["validate", str(self.csv_path)])
+        self.assertEqual(code, 1)
+        for fragment in ("怎样算过", "Skill", "退出码"):
+            self.assertIn(fragment, err)
+
+    def test_warning_output_separates_blocking_from_advisory(self) -> None:
+        write_csv(self.csv_path, [task(id="T001", refs="../evil"), REVIEW])
+        code, out, err = self.run_cmd(["validate", str(self.csv_path)])
+        self.assertEqual(code, 0, err)
+        self.assertIn("[阻断] refs-invalid", out)
+        self.assertIn("gates-set tasks-review=PASS", out)
+
+        write_csv(self.csv_path, [task(id="T001", refs=""), REVIEW])
+        code, out, err = self.run_cmd(["validate", str(self.csv_path)])
+        self.assertEqual(code, 0, err)
+        self.assertIn("[提示] refs-missing", out)
+        self.assertNotIn("[阻断] refs-missing", out)
+
+    def test_mode_message_states_the_judgement_rule(self) -> None:
+        write_csv(self.csv_path, [task(id="T001", mode="MANUAL"), REVIEW])
+        code, _, err = self.run_cmd(["validate", str(self.csv_path)])
+        self.assertEqual(code, 1)
+        for fragment in ("AFK", "HITL", "判定权"):
+            self.assertIn(fragment, err)
+
+    def test_blocked_requires_reason_prefix(self) -> None:
+        write_csv(self.csv_path, [task(id="T001"), REVIEW])
+        self.approve_execution()
+        code, _, err = self.run_cmd(
+            ["set", str(self.csv_path), "T001", "--state", "blocked", "--notes", "等一下"]
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("分类前缀", err)
+
+        code, _, err = self.run_cmd(
+            [
+                "set",
+                str(self.csv_path),
+                "T001",
+                "--state",
+                "blocked",
+                "--notes",
+                "wait-user: 等用户确认导入页提示",
+            ]
+        )
+        self.assertEqual(code, 0, err)
+
+    def test_next_reports_blocked_reasons(self) -> None:
+        write_csv(
+            self.csv_path,
+            [
+                task(id="T001", state="blocked", notes="wait-user: 等人确认"),
+                task(id="T002", state="blocked", notes="env-missing: 没装 keil"),
+                task(id="T003", state="blocked", notes="没写前缀的历史备注"),
+                REVIEW,
+            ],
+        )
+        code, out, err = self.run_cmd(["next", str(self.csv_path)])
+        self.assertEqual(code, 0, err)
+        payload = json.loads(out)
+        self.assertIsNone(payload["next"])
+        self.assertEqual(payload["blocked"]["wait-user"], ["T001"])
+        self.assertEqual(payload["blocked"]["env-missing"], ["T002"])
+        self.assertEqual(payload["blocked"]["unclassified"], ["T003"])
+        self.assertIn("blocked(wait-user)", payload["detail"]["T001"])
+
+    def test_archive_check_groups_blocked_by_reason(self) -> None:
+        write_csv(
+            self.csv_path,
+            [
+                task(id="T001", state="blocked", notes="env-missing: 没有探针"),
+                task(id="REVIEW", title="review", description="audit", verification="", refs="", state="todo"),
+            ],
+        )
+        code, _, err = self.run_cmd(["archive-check", str(self.csv_path)])
+        self.assertEqual(code, 1)
+        self.assertIn("还有 blocked 任务（env-missing）：T001", err)
 
     def test_set_rejects_unsatisfied_dependencies(self) -> None:
         write_csv(
@@ -602,7 +702,7 @@ class WorklineCsvTests(unittest.TestCase):
             ["set", str(self.csv_path), "T002", "--state", "doing"]
         )
         self.assertEqual(code, 1)
-        self.assertIn("dependencies are not satisfied", err)
+        self.assertIn("依赖未满足", err)
 
     def test_review_refs_do_not_cover_requirements(self) -> None:
         write_csv(
@@ -636,7 +736,7 @@ class WorklineCsvTests(unittest.TestCase):
         write_csv(self.csv_path, [task(id="bad id"), REVIEW])
         code, _, err = self.run_cmd(["validate", str(self.csv_path)])
         self.assertEqual(code, 1)
-        self.assertIn("invalid task id", err)
+        self.assertIn("id 非法", err)
 
     def test_ref_paths_cannot_escape_or_use_ambiguous_separators(self) -> None:
         write_csv(
