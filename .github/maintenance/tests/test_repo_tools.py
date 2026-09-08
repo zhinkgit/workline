@@ -14,6 +14,7 @@ if str(MAINTENANCE_DIR) not in sys.path:
 from package_release import build_archives, write_checksums  # noqa: E402
 from repo_checks import (  # noqa: E402
     check_readme_skills,
+    check_reference_copies,
     check_script_copies,
     check_skill_metadata,
     local_link_target,
@@ -121,6 +122,26 @@ class RepositoryCheckTests(unittest.TestCase):
             ).write_text("different\n", encoding="utf-8")
             errors = check_script_copies(root)
             self.assertTrue(any("script copy diverged" in item for item in errors))
+            self.assertEqual(len(errors), 4)
+
+    def test_reference_copies_must_be_byte_identical(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in (
+                "workline-tasks",
+                "workline-run",
+                "workline-review",
+                "workline-archive",
+            ):
+                (root / name).mkdir()
+                (root / name / "REFERENCE.md").write_text("same", encoding="utf-8")
+            self.assertEqual(check_reference_copies(root), [])
+
+            (root / "workline-run" / "REFERENCE.md").write_text(
+                "different", encoding="utf-8"
+            )
+            errors = check_reference_copies(root)
+            self.assertTrue(any("reference copy diverged" in item for item in errors))
             self.assertEqual(len(errors), 4)
 
 
