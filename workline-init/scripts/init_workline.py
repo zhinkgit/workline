@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import re
 import shutil
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -58,6 +59,81 @@ def render_brief_template(created_at: str, title: str, brief: str) -> str:
 def render_run_template(created_at: str, title: str) -> str:
     template = skill_template("run.md").read_text(encoding="utf-8")
     return template.replace("{{created_at}}", created_at).replace("{{title}}", title)
+
+
+def run_git(args: list[str], cwd: Path) -> bool:
+    try:
+        result = subprocess.run(
+            ["git", *args], cwd=str(cwd), capture_output=True, text=True, timeout=10
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0
+
+
+def git_repo_root(cwd: Path) -> Path | None:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0:
+        return None
+    return Path(result.stdout.strip())
+
+
+def ensure_doc_repo(workline_dir: Path, active_dir: Path) -> None:
+    """过程文档用 .workline/ 下的独立 Git 仓库管理，和代码仓库彻底分开。
+
+    任何一步失败都只提示，不阻断 init：没装 git 或没配 user.name 时流程照常可用。
+    """
+    if not (workline_dir / ".git").exists():
+        if not run_git(["init"], workline_dir):
+            print(
+                "NOTICE: 无法在 .workline/ 下建立文档 Git 仓库（git 不可用），"
+                "过程文档不会有版本管理",
+                file=sys.stderr,
+            )
+            return
+        print(f"NOTICE: 已建立过程文档 Git 仓库 {workline_dir}", file=sys.stderr)
+
+    rel = active_dir.relative_to(workline_dir).as_posix()
+    if not run_git(["add", "--", rel], workline_dir):
+        return
+    if not run_git(["commit", "-m", f"workline: init {active_dir.name}"], workline_dir):
+        print(
+            "NOTICE: 文档仓库暂存成功但提交失败（通常是没配 git user.name / user.email），"
+            "补好后自行提交即可",
+            file=sys.stderr,
+        )
+
+
+def ignore_workline_in_code_repo(root: Path, workline_dir: Path) -> None:
+    """代码仓库的 .gitignore 里加一行 .workline/，避免 embedded repository 陷阱。"""
+    code_repo = git_repo_root(root)
+    if code_repo is None or code_repo.resolve() == workline_dir.resolve():
+        return
+    gitignore = code_repo / ".gitignore"
+    try:
+        text = gitignore.read_text(encoding="utf-8") if gitignore.exists() else ""
+        if any(line.strip().rstrip("/") == ".workline" for line in text.splitlines()):
+            return
+        prefix = "" if not text or text.endswith("\n") else "\n"
+        gitignore.write_text(
+            f"{text}{prefix}.workline/\n", encoding="utf-8"
+        )
+    except OSError as exc:
+        print(f"NOTICE: 无法更新 {gitignore}：{exc}", file=sys.stderr)
+        return
+    print(
+        f"NOTICE: 已在 {gitignore} 追加 .workline/，过程文档不会混进代码仓库",
+        file=sys.stderr,
+    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -129,6 +205,9 @@ def main() -> int:
         shutil.rmtree(staging_dir, ignore_errors=True)
         print(f"ERROR: cannot create active directory: {exc}", file=sys.stderr)
         return 1
+
+    ensure_doc_repo(root / ".workline", active_dir)
+    ignore_workline_in_code_repo(root, root / ".workline")
 
     print(active_dir)
     return 0

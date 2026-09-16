@@ -40,7 +40,8 @@ disable-model-invocation: true
    - `brief.md`
    - `run.md`
    - `references/`
-5. 返回活动目录路径，并按下节告诉用户他需要准备什么。
+5. 确认 `.workline/` 下已有独立的过程文档 Git 仓库（脚本自动建，见「两套版本管理」）。
+6. 返回活动目录路径，并按下节告诉用户他需要准备什么。
 
 示例：
 
@@ -50,6 +51,30 @@ python <SKILL_DIR>/scripts/init_workline.py --root . --slug modify-agc-module --
 ```
 
 目录名里的英文只是标识，`brief.md`、`run.md` 等文件内容和与用户的对话仍然全部用中文。
+
+## 两套版本管理
+
+过程文档和业务代码**分属两个 Git 仓库**，脚本在初始化时自动落位：
+
+| 仓库 | 位置 | 管什么 | 谁提交 |
+| --- | --- | --- | --- |
+| 文档库 | `.workline/.git` | `brief.md`、`prd.md`、`tasks.csv`、`run.md`、`notes/` | `$workline-archive` |
+| 代码库 | `brief.md` 的「## 代码仓库」表里登记的路径 | 业务代码 | `$workline-run` 的提交收口 |
+
+这样 workline 打开在哪一层都不影响流程：打开在代码仓库根目录可以，打开在 `C:/Users/Public/RK3568` 这种父目录、代码散在 `project/commagc/agcavc` 子目录里也可以。
+
+脚本会做三件事，任何一件失败都只提示不阻断：
+
+- `.workline/` 下 `git init`（已存在则跳过），并把新建的活动目录提交一次作为基线。
+- 若 `.workline/` 落在某个代码仓库内，往那个仓库的 `.gitignore` 追加一行 `.workline/`，避免过程文档混进代码提交、也避免 `git add` 撞上 embedded repository 陷阱。
+- `brief.md` 生成「## 代码仓库」空表，等 `$workline-grill` 填候选、用户确认。
+
+**代码仓库登记表**决定了后续 `tasks.csv` 里的提交哈希去哪核验：
+
+- workline 打开在代码仓库根目录 → 表留空即可，脚本自动认这个仓库。
+- 打开在父目录 → **必须登记**，否则真实哈希一律无法核验，只能写 `no-change`。
+- 一次任务动多个仓库 → 登记多行，脚本逐个仓库找哈希。
+- 纯文档 / 调研任务 → 表留空，所有任务的 `commit` 写 `no-change`。
 
 ## 用户只负责仓库外的材料
 
@@ -78,6 +103,9 @@ python <SKILL_DIR>/scripts/init_workline.py --root . --slug modify-agc-module --
 - `brief.md` 已写入创建时间和用户提供的原始粗需求。
 - `run.md` 已创建，内含「阶段门禁」表，四扇门都是未确认 / 未审查。
 - `references/` 已创建为空目录。
+- `.workline/` 下已建立独立的过程文档 Git 仓库，业务代码的版本管理仍归代码仓库自己；若脚本提示 git 不可用或提交失败，如实转达。
+- 若已往代码仓库的 `.gitignore` 追加 `.workline/`，说明这一步做了什么。
+- `brief.md` 多了一张「## 代码仓库」空表：workline 就开在代码仓库根目录时可以不管；开在父目录、代码在子目录时需要登记，否则后续提交哈希无法核验。
 - 请检查 `brief.md` 中的原始粗需求；材料表现在是空的，**只需准备仓库里没有的外部材料**：需要随归档保存或被 `refs` 引用的放进 `references/` 再登记相对路径，其余直接在表里填外部绝对路径即可，不必复制。
 - 仓库内已有的文件目录不必手工登记，`$workline-grill` 会扫出候选清单请你确认。
 - 外部材料放好后使用 `$workline-grill`；它会先补全候选材料清单、评估是否够用，再开始分轮澄清。

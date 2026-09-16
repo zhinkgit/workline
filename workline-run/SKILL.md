@@ -104,11 +104,15 @@ python <SKILL_DIR>/scripts/workline_csv.py gates-set <active-dir> --gate execute
 
 验证通过后自动尝试提交本任务的业务改动。
 
-1. `git status --short`；未在本次任务中改过的文件不得静默纳入。
-2. **不要暂存 `.workline/`**，过程文件留到 `$workline-archive`。
-3. `git log --oneline -5`，提交信息融入已有风格并带上任务 ID，如 `workline: T003 完成批量导入校验`。
-4. 用显式路径暂存，提交后 `commit` 写 `git rev-parse --short=12 HEAD` 的真实哈希；脚本会在 git 中核验，编造的哈希会被拒绝。
-5. 没有业务改动写 `no-change`；环境无法安全提交时用 `--commit "" --notes "<原因>"`，后续任务可继续，但 `archive-check` 会失败直到补上。
+提交对象是 `brief.md` 的「## 代码仓库」表里登记的仓库，**不是** `.workline/` 文档库。表里登记了哪个就在哪个里提交；表留空则代码仓库就是 workline 根所在的那个仓库。下面的 `<repo>` 指该仓库路径，用 `git -C <repo>` 执行，不要 `cd` 来回切。
+
+1. `git -C <repo> status --short`；未在本次任务中改过的文件不得静默纳入。
+2. **不要暂存 `.workline/`**，过程文件留到 `$workline-archive` 提交进文档库。
+3. `git -C <repo> log --oneline -5`，提交信息融入该仓库已有风格并带上任务 ID，如 `workline: T003 完成批量导入校验`。
+4. 用显式路径暂存，提交后 `commit` 写 `git -C <repo> rev-parse --short=12 HEAD` 的真实哈希；脚本会在所有已登记仓库里逐个核验，编造的哈希会被拒绝。
+5. 一个任务动了多个登记仓库时分别提交，`commit` 列填主改动那个仓库的哈希，其余哈希连同仓库名写进 `run.md` 的「实现」一条，避免追溯断线。
+6. 没有业务改动写 `no-change`；环境无法安全提交时用 `--commit "" --notes "<原因>"`，后续任务可继续，但 `archive-check` 会失败直到补上。
+7. 报错提示「无法在 git 中核验」时，先查 `brief.md` 的「## 代码仓库」是否漏登记，别直接退回 `no-change` 把问题盖过去。
 
 **标记完成**：
 

@@ -67,15 +67,16 @@ flowchart TD
 
 `workline-review` 插在方案和步骤两道关口：写方案的同一个 agent 不能自己宣布可以拆任务；任务表也必须被当作审查对象看过一遍。「帮我实现 X」是需求，不是执行许可。
 
-项目里只多一个 `.workline/` 目录：
+项目里只多一个 `.workline/` 目录，它自己是一个独立的 Git 仓库：
 
 ```text
 .workline/
+├── .git/                           ← 过程文档库，和代码仓库各管各的
 ├── notes/                          ← 跨任务复用的结论，索引挂进 AGENTS.md / CLAUDE.md
 │   └── index.md
 ├── active/
 │   └── 2026-05-28-0915-example/    ← 进行中的一次长任务
-│       ├── brief.md                ← 粗需求 + 材料登记
+│       ├── brief.md                ← 粗需求 + 代码仓库登记 + 材料登记
 │       ├── prd.md                  ← 执行方案
 │       ├── tasks.csv               ← 可测步骤和状态
 │       ├── run.md                  ← 阶段门禁 + 执行日志
@@ -83,6 +84,21 @@ flowchart TD
 └── archive/
     └── 2026-05/                    ← 完成后按月归档
 ```
+
+### 两套版本管理
+
+过程文档和业务代码分开管：`.workline/.git` 管 `brief.md`、`prd.md`、`tasks.csv`、`run.md`、`notes/`，由 `workline-archive` 提交；业务代码归代码仓库自己，由 `workline-run` 每个任务收口时提交。`workline-init` 会自动建文档库，并在 `.workline/` 落在代码仓库内时往那个仓库的 `.gitignore` 追加 `.workline/`。
+
+所以 workline 打开在哪一层都行。代码仓库在哪由 `brief.md` 的「## 代码仓库」表决定：
+
+| 场景 | 怎么填 |
+| --- | --- |
+| 打开在代码仓库根目录 | 留空，脚本自动认这个仓库 |
+| 打开在父目录，代码在子目录（如 `RK3568/` 下的 `project/commagc/agcavc`） | 登记子目录路径 |
+| 一次任务动多个仓库 | 登记多行，标 done 时逐个仓库找哈希 |
+| 纯文档 / 调研 | 留空，`commit` 全写 `no-change` |
+
+登记了却用不了的路径会报阻断级 `code-repo-invalid`。
 
 门禁写在 `run.md`（物料确认 → 方案审查 → 步骤审查 → 执行确认）。下一阶段只认这张表。`tasks.csv` 是执行期唯一状态源；`refs` 指向方案条款和物料，不写本任务要改的目标文件。校验由各 Skill 自带的 `workline_csv.py` 完成，调不到脚本就停止。
 
@@ -98,7 +114,7 @@ flowchart TD
 | `title` / `description` | 短标题，以及范围和做法 |
 | `verification` | 用什么手段、怎样算过。可以是命令行、Skill 或其他工具 |
 | `state` | `todo` → `doing` → `done`；条件不够则 `blocked`，确认跳过则 `skipped` |
-| `commit` | 本步业务提交的哈希，无改动写 `no-change` |
+| `commit` | 本步业务提交的哈希，在 `brief.md` 登记的代码仓库里核验；无改动写 `no-change` |
 | `refs` | 执行时加载的材料：`FR-2`、`references/`、`evidence/`、仓库内相对路径（含 `.workline/notes/`）；不写外部绝对路径，也不写本任务要改的目标文件 |
 | `notes` | 阻塞、跳过、commit 为空等短备注 |
 
@@ -137,7 +153,7 @@ ERROR: state=blocked 的 notes 必须以分类前缀开头，按原因选一个�
 
 ```text
 .workline/active/<slug>/
-    brief.md + references/     你登记仓库外物料；grill 补齐仓库内候选清单
+    brief.md + references/     你登记仓库外物料；grill 补齐仓库内候选清单和代码仓库
             │
             ▼  $workline-grill
         prd.md                 分轮澄清后的执行方案
@@ -152,12 +168,12 @@ ERROR: state=blocked 的 notes 必须以分类前缀开头，按原因选一个�
                校验门禁 → next 取下一任务（优先 AFK）
                → 按 refs 加载材料
                → set doing → 实现 → 按 verification 验证
-               → 写 run.md → 提交业务改动（不含 .workline/）
+               → 写 run.md → 在登记的代码仓库里提交业务改动
                → set done
                → 全部闭环后跑 REVIEW 行
             │
             ▼  $workline-archive
-        notes/ + archive/      沉淀可复用结论，挂索引，搬走活动目录
+        notes/ + archive/      沉淀可复用结论，挂索引，搬走活动目录，提交进 .workline 文档库
 ```
 
 推荐这样唤起执行，路径指向那份 CSV：

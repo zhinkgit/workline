@@ -93,14 +93,18 @@ mkdir -p ".workline/archive/<YYYY-MM>" && mv ".workline/active/<slug>" ".worklin
 
 ## 归档提交
 
-提交范围：归档目录下的 `brief.md`、`prd.md`、`tasks.csv`、`run.md`，`.workline/notes/` 下本次新增或修改的文件，以及本次追加了 notes 指针的 `AGENTS.md` 或 `CLAUDE.md`。
+提交进 **`.workline/` 文档库**，不是代码仓库；代码的提交已经在 `$workline-run` 的每个任务里各自收口了。所有路径相对 `.workline/`，用 `git -C .workline` 执行。
+
+提交范围：归档目录下的 `brief.md`、`prd.md`、`tasks.csv`、`run.md`，以及 `notes/` 下本次新增或修改的文件。本次若往项目的 `AGENTS.md` 或 `CLAUDE.md` 追加了 notes 指针，那两个文件属于代码仓库，在代码仓库里单独提交，不要混进文档库这一次。
 
 `references/` 和 `evidence/` 作为过程材料保留在归档目录中，不进入这次提交。这意味着它们默认只保证当前工作区可追溯：重新克隆后归档目录里指向 `evidence/` 的 `refs` 会失效。需要跨机器审计时先检查体积和敏感信息，再由用户明确决定是否加入 Git 或外部制品库。
 
 ```powershell
-git add -- ".workline/archive/<YYYY-MM>/<slug>/brief.md" ".workline/archive/<YYYY-MM>/<slug>/prd.md" ".workline/archive/<YYYY-MM>/<slug>/tasks.csv" ".workline/archive/<YYYY-MM>/<slug>/run.md" ".workline/notes/index.md" ".workline/notes/<主题>.md"
-git commit -m "workline: archive <slug>"
+git -C .workline add -- "archive/<YYYY-MM>/<slug>/brief.md" "archive/<YYYY-MM>/<slug>/prd.md" "archive/<YYYY-MM>/<slug>/tasks.csv" "archive/<YYYY-MM>/<slug>/run.md" "notes/index.md" "notes/<主题>.md"
+git -C .workline commit -m "workline: archive <slug>"
 ```
+
+`.workline/` 下没有 Git 仓库时（`$workline-init` 建库失败，或活动目录是手工建的），跳过提交，把归档结果和「过程文档没有版本记录」一并报告，不要退回去往代码仓库里提交。
 
 提交失败时不回滚已完成的目录移动；停止并报告失败原因，让用户处理 Git 状态后重试。
 
@@ -121,4 +125,4 @@ git commit -m "workline: archive <slug>"
 - 写入 `.workline/notes/` 的条目清单；无新增时明确说明。
 - notes 指针写进了哪个文件，或为什么没写。
 - 是否建议整理 notes，以及用户的决定。
-- 归档提交结果；失败时给出需要用户处理的 Git 状态。
+- 归档提交结果（提交在 `.workline/` 文档库里）；失败时给出需要用户处理的 Git 状态。

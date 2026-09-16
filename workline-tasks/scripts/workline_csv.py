@@ -88,12 +88,19 @@ PADDED_REQ_HEADING_RE = re.compile(r"^###\s+((?:FR|NFR)-0\d+)\b", re.MULTILINE)
 REQ_REF_RE = re.compile(r"\b(?:FR|NFR)-[1-9]\d*\b")
 PADDED_REQ_REF_RE = re.compile(r"\b(?:FR|NFR)-0\d+\b")
 FUNCTION_HEADING_RE = re.compile(r"^##\s+功能要求\s*$", re.MULTILINE)
+CODE_REPO_SECTION_RE = re.compile(
+    r"^##[ \t]+代码仓库[ \t]*$(.*?)(?=^##[ \t]+|\Z)",
+    re.MULTILINE | re.DOTALL,
+)
+CODE_REPO_HEADER_CELLS = {"仓库路径", "路径"}
+HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 NEXT_H2_RE = re.compile(r"^##\s+", re.MULTILINE)
 REF_REQ_TOKEN_RE = re.compile(r"^(?:FR|NFR)-[1-9]\d*$")
 ACTIVE_REF_PREFIXES = ("references/", "evidence/")
 WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:")
 TASK_ID_RE = re.compile(r"^T\d{3,}$")
 BLOCKING_WARNING_CODES = {
+    "code-repo-invalid",
     "fr-headings-missing",
     "fr-uncovered",
     "nfr-uncovered",
@@ -312,47 +319,138 @@ def git_repo_root(cwd: Path) -> Path | None:
     return Path(result.stdout.strip())
 
 
-def git_commit_exists(cwd: Path, commit: str) -> bool | None:
-    root = git_repo_root(cwd)
-    if root is None:
-        return None
-    try:
-        result = subprocess.run(
-            ["git", "cat-file", "-t", commit],
-            cwd=str(root),
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    return result.returncode == 0 and result.stdout.strip() == "commit"
+def workline_root(csv_path: Path) -> Path:
+    """代码仓库路径的解析基准：含 .workline/ 的目录，非标准布局下退回 tasks.csv 所在目录。"""
+    base = project_root(csv_path.parent)
+    return base if base is not None else csv_path.resolve().parent
 
 
-def git_non_workline_dirty(cwd: Path) -> list[str]:
-    root = git_repo_root(cwd)
-    if root is None:
-        return []
+def read_brief_text(csv_path: Path) -> str | None:
+    brief_path = csv_path.parent / "brief.md"
     try:
-        result = subprocess.run(
-            ["git", "status", "--short"],
-            cwd=str(root),
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-    except (OSError, subprocess.TimeoutExpired):
+        return brief_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        raise WorklineCsvError(f"无法读取 brief.md：{exc}") from exc
+
+
+def read_declared_code_repos(csv_path: Path) -> list[str]:
+    """brief.md 的「## 代码仓库」表格里登记的仓库路径，相对 workline 根，保序去重。"""
+    text = read_brief_text(csv_path)
+    if text is None:
         return []
-    if result.returncode != 0:
+    match = CODE_REPO_SECTION_RE.search(text)
+    if not match:
         return []
+    section = HTML_COMMENT_RE.sub("", match.group(1))
+    repos: list[str] = []
+    for line in section.splitlines():
+        line = line.strip()
+        if not line.startswith("|"):
+            continue
+        cell = line.strip("|").split("|")[0].strip()
+        if not cell or set(cell) <= set("-: "):
+            continue
+        if cell in CODE_REPO_HEADER_CELLS:
+            continue
+        cell = cell.strip("`").strip().replace("\\", "/").rstrip("/")
+        if cell and cell not in repos:
+            repos.append(cell)
+    return repos
+
+
+def code_repo_paths(csv_path: Path) -> tuple[list[Path], list[str]]:
+    """返回（可核验的代码仓库根, 登记了但用不了的路径）。
+
+    brief.md 登记优先：写了就只认这些；没写则从 workline 根向上自动探测一个。
+    文档库 .workline/ 永远不算代码仓库。
+    """
+    root = workline_root(csv_path)
+    doc_repo = (root / ".workline").resolve()
+    declared = read_declared_code_repos(csv_path)
+    if not declared:
+        auto = git_repo_root(root)
+        return ([auto] if auto is not None and auto.resolve() != doc_repo else [], [])
+
+    repos: list[Path] = []
+    invalid: list[str] = []
+    for rel in declared:
+        candidate = (root / rel).resolve()
+        found = git_repo_root(candidate) if candidate.is_dir() else None
+        if found is None or found.resolve() == doc_repo:
+            invalid.append(rel)
+            continue
+        found = found.resolve()
+        if found not in repos:
+            repos.append(found)
+    return (repos, invalid)
+
+
+def git_commit_exists(csv_path: Path, commit: str) -> bool | None:
+    """在已登记的代码仓库里逐个找这个哈希；没有可用仓库时返回 None（无法核验）。"""
+    repos, _ = code_repo_paths(csv_path)
+    if not repos:
+        return None
+    for repo in repos:
+        try:
+            result = subprocess.run(
+                ["git", "cat-file", "-t", commit],
+                cwd=str(repo),
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        if result.returncode == 0 and result.stdout.strip() == "commit":
+            return True
+    return False
+
+
+def code_repo_hint(csv_path: Path) -> str:
+    repos, _ = code_repo_paths(csv_path)
+    if not repos:
+        return "brief.md 的「## 代码仓库」没有登记可核验的仓库"
+    root = workline_root(csv_path)
+    names = [repo_label(repo, root) for repo in repos]
+    return "已登记的代码仓库：" + ", ".join(names)
+
+
+def repo_label(repo: Path, root: Path) -> str:
+    try:
+        rel = repo.relative_to(root).as_posix()
+    except ValueError:
+        return repo.as_posix()
+    return rel or "."
+
+
+def code_repos_dirty(csv_path: Path) -> list[str]:
+    """已登记代码仓库里的未提交改动，路径带仓库前缀；.workline/ 自身不算。"""
+    repos, _ = code_repo_paths(csv_path)
+    root = workline_root(csv_path)
     dirty: list[str] = []
-    for line in result.stdout.splitlines():
-        if len(line) < 4:
+    for repo in repos:
+        try:
+            result = subprocess.run(
+                ["git", "status", "--short"],
+                cwd=str(repo),
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except (OSError, subprocess.TimeoutExpired):
             continue
-        rel = line[3:].strip().replace("\\", "/")
-        if rel.startswith(".workline/") or "/.workline/" in f"/{rel}":
+        if result.returncode != 0:
             continue
-        dirty.append(rel)
+        prefix = repo_label(repo, root)
+        for line in result.stdout.splitlines():
+            if len(line) < 4:
+                continue
+            rel = line[3:].strip().replace("\\", "/")
+            if rel.startswith(".workline/") or "/.workline/" in f"/{rel}":
+                continue
+            dirty.append(rel if prefix == "." else f"{prefix}/{rel}")
     return dirty
 
 
@@ -744,7 +842,6 @@ def parse_require_item(item: str) -> tuple[str, set[str]]:
 def collect_done_errors(rows: list[dict[str, str]], csv_path: Path) -> list[str]:
     errors: list[str] = []
     sections = read_run_sections(csv_path)
-    cwd = csv_path.parent
     for row in rows:
         if row["state"] != "done":
             continue
@@ -755,14 +852,17 @@ def collect_done_errors(rows: list[dict[str, str]], csv_path: Path) -> list[str]
                     f"{task_id}: state=done 但 commit 为空且 notes 未说明原因"
                 )
         elif row["commit"] != "no-change":
-            exists = git_commit_exists(cwd, row["commit"])
+            exists = git_commit_exists(csv_path, row["commit"])
             if exists is None:
                 errors.append(
                     f"{task_id}: commit {row['commit']} 无法在 git 中核验；"
-                    "当前目录不是 Git 仓库或 git 不可用"
+                    + code_repo_hint(csv_path)
                 )
             elif not exists:
-                errors.append(f"{task_id}: commit {row['commit']} 不是本仓库中的提交")
+                errors.append(
+                    f"{task_id}: commit {row['commit']} 不在任何已登记的代码仓库中；"
+                    + code_repo_hint(csv_path)
+                )
         if sections is None:
             errors.append(f"{task_id}: state=done 但 run.md 不存在")
         elif task_id not in sections:
@@ -903,13 +1003,27 @@ def build_warnings(
                         }
                     )
 
-    dirty = git_non_workline_dirty(csv_path.parent)
+    _, invalid_repos = code_repo_paths(csv_path)
+    if invalid_repos:
+        warnings.append(
+            {
+                "code": "code-repo-invalid",
+                "task_id": "GIT",
+                "message": (
+                    "brief.md 登记的代码仓库不可用："
+                    + ", ".join(invalid_repos)
+                    + "（目录不存在、不在任何 Git 仓库内，或指向了 .workline 自身）"
+                ),
+            }
+        )
+
+    dirty = code_repos_dirty(csv_path)
     if dirty:
         warnings.append(
             {
                 "code": "worktree-dirty",
                 "task_id": "GIT",
-                "message": "工作区有非 .workline 的未提交改动：" + ", ".join(dirty[:8]),
+                "message": "代码仓库有未提交改动：" + ", ".join(dirty[:8]),
             }
         )
 
@@ -1034,15 +1148,17 @@ def validate_transition(
             "环境暂时无法提交则 --commit '' 配合 --notes"
         )
     if effective_commit and effective_commit != "no-change":
-        exists = git_commit_exists(csv_path.parent, effective_commit)
+        exists = git_commit_exists(csv_path, effective_commit)
         if exists is None:
             raise WorklineCsvError(
                 f"{task_id}: commit {effective_commit} 无法在 git 中核验；"
-                "不是 Git 仓库时用 --commit no-change 或 --commit '' --notes"
+                + code_repo_hint(csv_path)
+                + "。登记仓库路径后重试；没有代码提交则用 --commit no-change 或 --commit '' --notes"
             )
         if not exists:
             raise WorklineCsvError(
-                f"{task_id}: commit {effective_commit} 不是本仓库中的提交"
+                f"{task_id}: commit {effective_commit} 不在任何已登记的代码仓库中；"
+                + code_repo_hint(csv_path)
             )
 
 

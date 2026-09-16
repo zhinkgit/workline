@@ -753,5 +753,240 @@ class WorklineCsvTests(unittest.TestCase):
         self.assertGreaterEqual(out.count("refs-invalid"), 3)
 
 
+class TwoRepoModelTests(unittest.TestCase):
+    """.workline/ 是独立文档库，代码提交去 brief.md 登记的代码仓库里核验。"""
+
+    def setUp(self) -> None:
+        self.tmpdir = Path(tempfile.mkdtemp(prefix="wl2repo-"))
+
+    def run_cmd(self, argv: list[str]) -> tuple[int, str, str]:
+        parser = M.build_parser()
+        args = parser.parse_args(argv)
+        from io import StringIO
+
+        stdout, stderr = StringIO(), StringIO()
+        old_out, old_err = sys.stdout, sys.stderr
+        sys.stdout, sys.stderr = stdout, stderr
+        try:
+            code = args.func(args)
+        except M.WorklineCsvError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            code = 1
+        finally:
+            sys.stdout, sys.stderr = old_out, old_err
+        return code, stdout.getvalue(), stderr.getvalue()
+
+    def make_repo(self, path: Path, content: str) -> str:
+        """建一个带一次提交的 git 仓库，返回短哈希。"""
+        path.mkdir(parents=True, exist_ok=True)
+        run = lambda *a: subprocess.run(
+            list(a), cwd=path, check=True, capture_output=True
+        )
+        run("git", "init")
+        run("git", "config", "user.email", "wl@test")
+        run("git", "config", "user.name", "wl")
+        (path / "file.txt").write_text(content, encoding="utf-8")
+        run("git", "add", "file.txt")
+        run("git", "commit", "-m", "init")
+        digest = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=path,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        return digest[:12]
+
+    def make_active(self, root: Path, repos_table: str) -> Path:
+        """标准布局的活动目录，brief.md 带指定的「## 代码仓库」表格内容。"""
+        active = root / ".workline" / "active" / "2026-09-16-1000-demo"
+        active.mkdir(parents=True)
+        (active / "references").mkdir()
+        (active / "prd.md").write_text("### FR-1 导入\n", encoding="utf-8")
+        (active / "brief.md").write_text(
+            "# Brief: demo\n\n## 代码仓库\n\n"
+            "<!-- 注释里的 | ignored/path | 不算登记 -->\n\n"
+            "| 仓库路径 | 说明 |\n| --- | --- |\n"
+            + repos_table
+            + "\n## 材料清单及用途\n\n| 路径 | 用途 | 来源 |\n| --- | --- | --- |\n",
+            encoding="utf-8",
+        )
+        template = (ROOT / "workline-init" / "templates" / "run.md").read_text(
+            encoding="utf-8"
+        )
+        text = template.replace("{{title}}", "demo").replace("{{created_at}}", "now")
+        (active / "run.md").write_text(text + "\n" + complete_log(), encoding="utf-8")
+        return active
+
+    def approve(self, directory: Path) -> None:
+        for gate, status in (
+            ("materials", "CONFIRMED"),
+            ("prd-review", "PASS"),
+            ("tasks-review", "PASS"),
+            ("execute", "CONFIRMED"),
+        ):
+            code, _, err = self.run_cmd(
+                ["gates-set", str(directory), "--gate", gate, "--status", status,
+                 "--actor", "user"]
+            )
+            self.assertEqual(code, 0, err)
+
+    def test_parent_dir_layout_verifies_hash_from_declared_subrepo(self) -> None:
+        """workline 打开在父目录、代码在子目录：登记后真实哈希可核验。"""
+        root = self.tmpdir / "RK3568"
+        digest = self.make_repo(root / "project" / "commagc" / "agcavc", "app\n")
+        active = self.make_active(root, "| project/commagc/agcavc | 业务主仓库 |\n")
+        csv_path = active / "tasks.csv"
+        write_csv(csv_path, [task(id="T001", state="doing"), REVIEW])
+        self.approve(active)
+        code, _, err = self.run_cmd(
+            ["set", str(csv_path), "T001", "--state", "done", "--commit", digest]
+        )
+        self.assertEqual(code, 0, err)
+
+    def test_multiple_declared_repos_each_verify(self) -> None:
+        root = self.tmpdir / "RK3568"
+        kernel_hash = self.make_repo(root / "kernel", "kernel\n")
+        app_hash = self.make_repo(root / "project" / "agcavc", "app\n")
+        self.assertNotEqual(kernel_hash, app_hash)
+        active = self.make_active(
+            root, "| kernel | 内核 |\n| project/agcavc | 业务 |\n"
+        )
+        csv_path = active / "tasks.csv"
+        write_csv(
+            csv_path,
+            [task(id="T001", state="doing"), task(id="T002", state="doing"), REVIEW],
+        )
+        self.approve(active)
+        for task_id, digest in (("T001", kernel_hash), ("T002", app_hash)):
+            (active / "run.md").write_text(
+                (active / "run.md").read_text(encoding="utf-8")
+                + "\n"
+                + complete_log(task_id),
+                encoding="utf-8",
+            )
+            code, _, err = self.run_cmd(
+                ["set", str(csv_path), task_id, "--state", "done", "--commit", digest]
+            )
+            self.assertEqual(code, 0, err)
+
+    def test_undeclared_parent_layout_cannot_verify(self) -> None:
+        """父目录本身不是仓库、又没登记：拒绝真实哈希并指向 brief.md。"""
+        root = self.tmpdir / "RK3568"
+        digest = self.make_repo(root / "project" / "agcavc", "app\n")
+        active = self.make_active(root, "")
+        csv_path = active / "tasks.csv"
+        write_csv(csv_path, [task(id="T001", state="doing"), REVIEW])
+        self.approve(active)
+        code, _, err = self.run_cmd(
+            ["set", str(csv_path), "T001", "--state", "done", "--commit", digest]
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("代码仓库", err)
+        code, _, err = self.run_cmd(
+            ["set", str(csv_path), "T001", "--state", "done", "--commit", "no-change"]
+        )
+        self.assertEqual(code, 0, err)
+
+    def test_doc_repo_is_never_mistaken_for_a_code_repo(self) -> None:
+        """.workline/ 自己是 git 仓库时，不能被当成代码仓库来核验哈希。"""
+        root = self.tmpdir / "proj"
+        code_hash = self.make_repo(root, "code\n")
+        active = self.make_active(root, "")
+        doc_hash = self.make_repo(root / ".workline", "doc\n")
+        csv_path = active / "tasks.csv"
+        write_csv(csv_path, [task(id="T001", state="doing"), REVIEW])
+        self.approve(active)
+        repos, invalid = M.code_repo_paths(csv_path)
+        self.assertEqual(invalid, [])
+        self.assertEqual([p.name for p in repos], ["proj"])
+        code, _, err = self.run_cmd(
+            ["set", str(csv_path), "T001", "--state", "done", "--commit", doc_hash]
+        )
+        self.assertEqual(code, 1, "文档库的提交不该被当成代码提交")
+        code, _, err = self.run_cmd(
+            ["set", str(csv_path), "T001", "--state", "done", "--commit", code_hash]
+        )
+        self.assertEqual(code, 0, err)
+
+    def test_declared_repo_that_is_not_a_repo_blocks(self) -> None:
+        root = self.tmpdir / "proj"
+        self.make_repo(root / "real", "x\n")
+        active = self.make_active(root, "| real | 真 |\n| missing/path | 假 |\n")
+        csv_path = active / "tasks.csv"
+        write_csv(csv_path, [task(id="T001"), REVIEW])
+        _, out, _ = self.run_cmd(["validate", str(csv_path)])
+        self.assertIn("code-repo-invalid", out)
+        self.assertIn("missing/path", out)
+        self.assertIn("[阻断]", out)
+
+    def test_dirty_warning_reports_repo_relative_paths(self) -> None:
+        root = self.tmpdir / "RK3568"
+        self.make_repo(root / "kernel", "k\n")
+        (root / "kernel" / "file.txt").write_text("changed\n", encoding="utf-8")
+        active = self.make_active(root, "| kernel | 内核 |\n")
+        csv_path = active / "tasks.csv"
+        write_csv(csv_path, [task(id="T001"), REVIEW])
+        _, out, _ = self.run_cmd(["validate", str(csv_path)])
+        self.assertIn("worktree-dirty", out)
+        self.assertIn("kernel/file.txt", out)
+
+    def test_init_creates_doc_repo_and_ignores_it_in_code_repo(self) -> None:
+        root = self.tmpdir / "proj"
+        self.make_repo(root, "code\n")
+        result = subprocess.run(
+            [sys.executable, str(INIT), "--root", str(root), "--brief", "bulk import",
+             "--now", "2026-09-16-1000"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        active = Path(result.stdout.strip())
+        self.assertTrue(active.is_dir())
+
+        self.assertTrue((root / ".workline" / ".git").exists(), "文档库没建起来")
+        logged = subprocess.run(
+            ["git", "log", "--oneline"],
+            cwd=root / ".workline",
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        self.assertIn("workline: init", logged)
+
+        ignore_text = (root / ".gitignore").read_text(encoding="utf-8")
+        self.assertIn(".workline/", ignore_text)
+        status = subprocess.run(
+            ["git", "status", "--short"], cwd=root, capture_output=True, text=True,
+            check=True,
+        ).stdout
+        self.assertNotIn(".workline", status.replace(".gitignore", ""))
+        self.assertIn("## 代码仓库", (active / "brief.md").read_text(encoding="utf-8"))
+
+    def test_init_is_idempotent_on_second_task(self) -> None:
+        root = self.tmpdir / "proj"
+        self.make_repo(root, "code\n")
+        for stamp in ("2026-09-16-1000", "2026-09-16-1100"):
+            result = subprocess.run(
+                [sys.executable, str(INIT), "--root", str(root), "--brief", "task",
+                 "--slug", f"s{stamp[-4:]}", "--now", stamp],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+        ignore_text = (root / ".gitignore").read_text(encoding="utf-8")
+        self.assertEqual(ignore_text.count(".workline/"), 1, "gitignore 被重复追加")
+        logged = subprocess.run(
+            ["git", "log", "--oneline"],
+            cwd=root / ".workline",
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        self.assertEqual(len(logged.strip().splitlines()), 2)
+
+
 if __name__ == "__main__":
     unittest.main()
