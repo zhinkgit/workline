@@ -6,6 +6,7 @@ from __future__ import annotations
 import csv
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -753,6 +754,27 @@ class WorklineCsvTests(unittest.TestCase):
         self.assertGreaterEqual(out.count("refs-invalid"), 3)
 
 
+def git_env(*, identity: bool) -> dict[str, str]:
+    """子进程用的环境：identity=True 固定一个 git 身份；False 则强制「没有身份」。"""
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(("GIT_AUTHOR_", "GIT_COMMITTER_", "GIT_CONFIG_"))
+    }
+    env["PYTHONIOENCODING"] = "utf-8"
+    if identity:
+        for role in ("AUTHOR", "COMMITTER"):
+            env[f"GIT_{role}_NAME"] = "wl"
+            env[f"GIT_{role}_EMAIL"] = "wl@test"
+    else:
+        env["GIT_CONFIG_NOSYSTEM"] = "1"
+        env["GIT_CONFIG_GLOBAL"] = os.devnull
+        env["GIT_CONFIG_COUNT"] = "1"
+        env["GIT_CONFIG_KEY_0"] = "user.useConfigOnly"
+        env["GIT_CONFIG_VALUE_0"] = "true"
+    return env
+
+
 class TwoRepoModelTests(unittest.TestCase):
     """.workline/ 是独立文档库，代码提交去 brief.md 登记的代码仓库里核验。"""
 
@@ -940,6 +962,7 @@ class TwoRepoModelTests(unittest.TestCase):
             capture_output=True,
             text=True,
             check=False,
+            env=git_env(identity=True),
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         active = Path(result.stdout.strip())
@@ -974,6 +997,7 @@ class TwoRepoModelTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 check=False,
+                env=git_env(identity=True),
             )
             self.assertEqual(result.returncode, 0, result.stderr)
         ignore_text = (root / ".gitignore").read_text(encoding="utf-8")
@@ -986,6 +1010,22 @@ class TwoRepoModelTests(unittest.TestCase):
             check=True,
         ).stdout
         self.assertEqual(len(logged.strip().splitlines()), 2)
+
+    def test_init_without_git_identity_still_succeeds(self) -> None:
+        """没配 user.name / user.email 时，基线提交失败只提示，不阻断 init。"""
+        root = self.tmpdir / "proj"
+        result = subprocess.run(
+            [sys.executable, str(INIT), "--root", str(root), "--brief", "bulk import",
+             "--now", "2026-09-16-1000"],
+            capture_output=True,
+            encoding="utf-8",
+            check=False,
+            env=git_env(identity=False),
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(Path(result.stdout.strip()).is_dir())
+        self.assertTrue((root / ".workline" / ".git").exists())
+        self.assertIn("提交失败", result.stderr)
 
 
 if __name__ == "__main__":
