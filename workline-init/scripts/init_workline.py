@@ -13,11 +13,12 @@ from pathlib import Path
 
 MAX_TOKEN_CHARS = 16
 MAX_SLUG_CHARS = 40
+SLUG_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 
 
-def slugify(value: str, fallback: str = "workline") -> str:
-    """ASCII 词按词切分，CJK 连续段按字符截断，避免中文需求全部回退到 fallback。"""
-    tokens = re.findall(r"[A-Za-z0-9]+|[\u4e00-\u9fff\u3040-\u30ff]+", value.lower())
+def slugify(value: str) -> str:
+    """只保留 ASCII 词。活动目录名必须全英文，中文等非 ASCII 字符一律丢弃。"""
+    tokens = re.findall(r"[A-Za-z0-9]+", value.lower())
     parts: list[str] = []
     length = 0
     for token in tokens[:8]:
@@ -27,7 +28,7 @@ def slugify(value: str, fallback: str = "workline") -> str:
             break
         parts.append(token)
         length += cost
-    return "-".join(parts) or fallback
+    return "-".join(parts)
 
 
 def read_brief_source(args: argparse.Namespace) -> str:
@@ -65,7 +66,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--root", default=".", help="project root, default: current directory")
     parser.add_argument("--brief", help="rough requirement text")
     parser.add_argument("--brief-file", help="path to a UTF-8 text file containing the rough requirement")
-    parser.add_argument("--slug", help="activity slug; defaults to a slug from the brief")
+    parser.add_argument("--slug", help="english slug in lowercase kebab-case; required when the brief has no ASCII words")
     parser.add_argument("--now", help="timestamp override in YYYY-MM-DD-HHMM format, mainly for tests")
     return parser.parse_args()
 
@@ -80,7 +81,23 @@ def main() -> int:
         return 2
 
     slug_source = args.slug or brief_text
+    if not args.slug and not slug_source.isascii():
+        print(
+            "ERROR: brief is not pure ASCII, so the directory name cannot be derived from it; "
+            "translate the requirement into english and pass --slug, "
+            "e.g. --slug modify-agc-module",
+            file=sys.stderr,
+        )
+        return 2
     slug = slugify(slug_source)
+    if not SLUG_PATTERN.fullmatch(slug):
+        print(
+            "ERROR: directory slug must be lowercase ASCII kebab-case; "
+            "translate the requirement into english and pass --slug, "
+            "e.g. --slug modify-agc-module",
+            file=sys.stderr,
+        )
+        return 2
     active_dir = root / ".workline" / "active" / f"{timestamp}-{slug}"
     archive_dir = root / ".workline" / "archive"
 

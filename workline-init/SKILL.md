@@ -19,7 +19,7 @@ disable-model-invocation: true
 ## 输入
 
 - 用户的粗略需求文本。
-- 可选活动目录 slug。
+- 活动目录 slug：**必须全英文**，小写 kebab-case，只允许 `a-z0-9-`。用户需求是中文时，由 agent 把它翻译概括成英文 slug 后用 `--slug` 传入，不要让脚本从中文里瞎猜。
 - 可选项目根目录；未提供时使用当前工作目录。
 
 ## 入口分流
@@ -34,19 +34,22 @@ disable-model-invocation: true
 ## 步骤
 
 1. 定位项目根目录。
-2. 运行初始化脚本创建 `.workline/active/<YYYY-MM-DD-HHMM-slug>/`；脚本会把用户的粗需求写入 `brief.md`。
-3. 确认新目录包含：
+2. 先想好英文 slug：用 3 个左右的英文小写单词概括这次需求，用 `-` 连接，例如 `modify-agc-module`、`bulk-import`。中文需求必须在这一步翻译成英文，**不要**把中文塞进目录名。
+3. 运行初始化脚本创建 `.workline/active/<YYYY-MM-DD-HHMM-slug>/`，并显式传 `--slug`；脚本会把用户的粗需求原文（可以是中文）写入 `brief.md`。
+4. 确认新目录包含：
    - `brief.md`
    - `run.md`
    - `references/`
-4. 返回活动目录路径，并按下节告诉用户他需要准备什么。
+5. 返回活动目录路径，并按下节告诉用户他需要准备什么。
 
 示例：
 
 ```bash
-python <SKILL_DIR>/scripts/init_workline.py --root . --brief "为现有工具增加批量导入流程"
 python <SKILL_DIR>/scripts/init_workline.py --root . --slug bulk-import --brief "为现有工具增加批量导入流程"
+python <SKILL_DIR>/scripts/init_workline.py --root . --slug modify-agc-module --brief "根据方案修改AGC模块"
 ```
+
+目录名里的英文只是标识，`brief.md`、`run.md` 等文件内容和与用户的对话仍然全部用中文。
 
 ## 用户只负责仓库外的材料
 
@@ -61,6 +64,9 @@ python <SKILL_DIR>/scripts/init_workline.py --root . --slug bulk-import --brief 
 
 ## 硬约束
 
+- **活动目录名必须全英文**：`<YYYY-MM-DD-HHMM-slug>` 中的 slug 只能由 `a-z`、`0-9` 和 `-` 组成，不得出现中文、大写字母、空格或下划线。脚本会丢弃非 ASCII 字符，slug 为空时直接报错退出。
+- 粗需求含中文等非 ASCII 字符却没传 `--slug` 时，脚本直接报错退出，不会拿需求里夹带的零星英文词凑名字。
+- slug 被脚本拒绝时，重新翻译出英文 slug 再传 `--slug`，不得手工 `mkdir` 中文目录绕过。
 - 目标目录已存在时停止并报告。
 - 脚本不可用时停止并报告实际路径问题，不得改用手工建目录绕过。
 
@@ -68,7 +74,7 @@ python <SKILL_DIR>/scripts/init_workline.py --root . --slug bulk-import --brief 
 
 用简短中文说明：
 
-- 新建活动目录路径。
+- 新建活动目录路径（目录名为全英文 slug）。
 - `brief.md` 已写入创建时间和用户提供的原始粗需求。
 - `run.md` 已创建，内含「阶段门禁」表，四扇门都是未确认 / 未审查。
 - `references/` 已创建为空目录。
