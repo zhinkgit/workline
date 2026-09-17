@@ -53,14 +53,15 @@ python <SKILL_DIR>/scripts/workline_csv.py gates-set <active-dir> --gate execute
 
 ## 加载 refs 材料
 
-按 `refs` 取材料，不要通读整个 `prd.md` 和 `references/`：
+按 `refs` 取材料，不要通读整个 `prd.md` 和材料清单：
 
 | 形式 | 加载动作 |
 | --- | --- |
 | `FR-2` / `NFR-1` | 读 `prd.md` 对应小节，以及「验收标准」「约束条件」中相关条目 |
-| `references/xxx.md` | 读活动目录下该文件 |
 | `evidence/T00X-xxx/` | 前序任务产物，需要复查时才读 |
 | `src/driver/uart.c` | 读项目根下该文件或目录，作为参考材料 |
+| `"D:/doc/spec v1.docx"` | 读该绝对路径；带空格的路径用双引号包住 |
+| `https://...` / `user@host` | 远程材料或设备，按需访问 |
 | `.workline/notes/xxx.md` | 已沉淀的项目约定和坑，实现前必读，与它冲突时停下说明 |
 
 `refs` 为空时读 `prd.md` 的「目标」「功能要求」「验收标准」兜底，并在 `run.md` 记录这条任务没有材料清单。
@@ -104,7 +105,7 @@ python <SKILL_DIR>/scripts/workline_csv.py gates-set <active-dir> --gate execute
 
 验证通过后自动尝试提交本任务的业务改动。
 
-提交对象是 `brief.md` 的「## 代码仓库」表里登记的仓库，**不是** `.workline/` 文档库。表里登记了哪个就在哪个里提交；表留空则代码仓库就是 workline 根所在的那个仓库。下面的 `<repo>` 指该仓库路径，用 `git -C <repo>` 执行，不要 `cd` 来回切。
+提交对象是 `brief.md` 材料清单里用途标 `[仓库]` 的仓库，**不是** `.workline/` 文档库。标了哪个就在哪个里提交；一行都没标则代码仓库就是 workline 根所在的那个仓库。下面的 `<repo>` 指该仓库路径，用 `git -C <repo>` 执行，不要 `cd` 来回切。
 
 1. `git -C <repo> status --short`；未在本次任务中改过的文件不得静默纳入。
 2. **不要暂存 `.workline/`**，过程文件留到 `$workline-archive` 提交进文档库。
@@ -112,7 +113,7 @@ python <SKILL_DIR>/scripts/workline_csv.py gates-set <active-dir> --gate execute
 4. 用显式路径暂存，提交后 `commit` 写 `git -C <repo> rev-parse --short=12 HEAD` 的真实哈希；脚本会在所有已登记仓库里逐个核验，编造的哈希会被拒绝。
 5. 一个任务动了多个登记仓库时分别提交，`commit` 列填主改动那个仓库的哈希，其余哈希连同仓库名写进 `run.md` 的「实现」一条，避免追溯断线。
 6. 没有业务改动写 `no-change`；环境无法安全提交时用 `--commit "" --notes "<原因>"`，后续任务可继续，但 `archive-check` 会失败直到补上。
-7. 报错提示「无法在 git 中核验」时，先查 `brief.md` 的「## 代码仓库」是否漏登记，别直接退回 `no-change` 把问题盖过去。
+7. 报错提示「无法在 git 中核验」时，先查 `brief.md` 材料清单是否漏标 `[仓库]`，别直接退回 `no-change` 把问题盖过去。
 
 **标记完成**：
 

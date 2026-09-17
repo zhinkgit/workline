@@ -113,29 +113,6 @@ def ensure_doc_repo(workline_dir: Path, active_dir: Path) -> None:
         )
 
 
-def ignore_workline_in_code_repo(root: Path, workline_dir: Path) -> None:
-    """代码仓库的 .gitignore 里加一行 .workline/，避免 embedded repository 陷阱。"""
-    code_repo = git_repo_root(root)
-    if code_repo is None or code_repo.resolve() == workline_dir.resolve():
-        return
-    gitignore = code_repo / ".gitignore"
-    try:
-        text = gitignore.read_text(encoding="utf-8") if gitignore.exists() else ""
-        if any(line.strip().rstrip("/") == ".workline" for line in text.splitlines()):
-            return
-        prefix = "" if not text or text.endswith("\n") else "\n"
-        gitignore.write_text(
-            f"{text}{prefix}.workline/\n", encoding="utf-8"
-        )
-    except OSError as exc:
-        print(f"NOTICE: 无法更新 {gitignore}：{exc}", file=sys.stderr)
-        return
-    print(
-        f"NOTICE: 已在 {gitignore} 追加 .workline/，过程文档不会混进代码仓库",
-        file=sys.stderr,
-    )
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Create .workline/active/<timestamp-slug>/")
     parser.add_argument("brief_text", nargs="*", help="rough requirement text")
@@ -197,7 +174,7 @@ def main() -> int:
         return 1
 
     try:
-        (staging_dir / "references").mkdir(parents=True)
+        staging_dir.mkdir(parents=True)
         (staging_dir / "brief.md").write_text(rendered_brief, encoding="utf-8")
         (staging_dir / "run.md").write_text(run_text, encoding="utf-8")
         staging_dir.replace(active_dir)
@@ -207,7 +184,6 @@ def main() -> int:
         return 1
 
     ensure_doc_repo(root / ".workline", active_dir)
-    ignore_workline_in_code_repo(root, root / ".workline")
 
     print(active_dir)
     return 0

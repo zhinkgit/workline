@@ -14,7 +14,7 @@ disable-model-invocation: true
 
 ## 归档前检查
 
-先确认活动目录包含 `brief.md`、`prd.md`、`tasks.csv`、`run.md`、`references/`，任何一项缺失都停止，不得移动目录。
+先确认活动目录包含 `brief.md`、`prd.md`、`tasks.csv`、`run.md`，任何一项缺失都停止，不得移动目录。
 
 最终审计由 `REVIEW` 行负责，本 Skill 只做搬运前硬检查：
 
@@ -80,7 +80,7 @@ python <SKILL_DIR>/scripts/workline_csv.py archive-check .workline/active/<slug>
 
 ## 移动目录
 
-从 slug 前缀取年月算出 `.workline/archive/<YYYY-MM>/<slug>/`。目标已存在则停止并报告；父目录不存在先创建。用移动操作搬运，保留 `references/` 或 `evidence/` 下链接本体，不复制外部软链接目标。移动后确认 active 路径不存在、archive 路径存在。
+从 slug 前缀取年月算出 `.workline/archive/<YYYY-MM>/<slug>/`。目标已存在则停止并报告；父目录不存在先创建。用移动操作搬运，保留 `evidence/` 下链接本体，不复制外部软链接目标。移动后确认 active 路径不存在、archive 路径存在。
 
 ```powershell
 New-Item -ItemType Directory -Force -Path ".workline\archive\<YYYY-MM>" | Out-Null
@@ -97,7 +97,7 @@ mkdir -p ".workline/archive/<YYYY-MM>" && mv ".workline/active/<slug>" ".worklin
 
 提交范围：归档目录下的 `brief.md`、`prd.md`、`tasks.csv`、`run.md`，以及 `notes/` 下本次新增或修改的文件。本次若往项目的 `AGENTS.md` 或 `CLAUDE.md` 追加了 notes 指针，那两个文件属于代码仓库，在代码仓库里单独提交，不要混进文档库这一次。
 
-`references/` 和 `evidence/` 作为过程材料保留在归档目录中，不进入这次提交。这意味着它们默认只保证当前工作区可追溯：重新克隆后归档目录里指向 `evidence/` 的 `refs` 会失效。需要跨机器审计时先检查体积和敏感信息，再由用户明确决定是否加入 Git 或外部制品库。
+`evidence/` 作为过程材料保留在归档目录中，不进入这次提交。这意味着它们默认只保证当前工作区可追溯：重新克隆后归档目录里指向 `evidence/` 的 `refs` 会失效。需要跨机器审计时先检查体积和敏感信息，再由用户明确决定是否加入 Git 或外部制品库。
 
 ```powershell
 git -C .workline add -- "archive/<YYYY-MM>/<slug>/brief.md" "archive/<YYYY-MM>/<slug>/prd.md" "archive/<YYYY-MM>/<slug>/tasks.csv" "archive/<YYYY-MM>/<slug>/run.md" "notes/index.md" "notes/<主题>.md"

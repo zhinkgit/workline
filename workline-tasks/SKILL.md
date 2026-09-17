@@ -33,7 +33,7 @@ python <SKILL_DIR>/scripts/workline_csv.py require-gates .workline/active/<slug>
 
 ## tasks.csv 十列
 
-`id`（`T` 加至少三位数字，末行固定 `REVIEW`）、`depends_on`（空格分隔的任务 ID，普通任务不得依赖 `REVIEW`，`REVIEW` 行留空）、`mode`、`title`、`description`（范围和实现说明，验证覆盖不到的完成标准也写这里）、`verification`、`state`、`commit`（7–64 位十六进制哈希 / `no-change` / 留空）、`refs`、`notes`。
+`id`（`T` 加至少三位数字，末行固定 `REVIEW`）、`depends_on`（空格分隔的任务 ID，普通任务不得依赖 `REVIEW`，`REVIEW` 行留空）、`mode`、`title`、`description`（范围和实现说明，验证覆盖不到的完成标准也写这里）、`verification`、`state`、`commit`（7–64 位十六进制哈希 / `no-change` / 留空）、`refs`（空格分隔，带空格的路径用英文双引号包住）、`notes`。
 
 前 6 列是计划，审查通过后不要改；后 4 列是执行状态。中途加任务用脚本的 `add`，不要手改表头。
 

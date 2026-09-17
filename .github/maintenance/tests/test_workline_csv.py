@@ -279,7 +279,7 @@ class WorklineCsvTests(unittest.TestCase):
     def test_refs_invalid_and_fr_padding(self) -> None:
         write_csv(
             self.csv_path,
-            [task(id="T001", refs="D:/outside/spec.pdf FR-01"), REVIEW],
+            [task(id="T001", refs="../outside/spec.pdf FR-01"), REVIEW],
         )
         (self.tmpdir / "prd.md").write_text("### FR-1 导入\n### FR-2 校验\n", encoding="utf-8")
         _, out, _ = self.run_cmd(["validate", str(self.csv_path)])
@@ -302,6 +302,26 @@ class WorklineCsvTests(unittest.TestCase):
         self.assertNotIn("refs-invalid", out)
         self.assertIn("引用路径不存在：docs/missing.md", out)
         self.assertNotIn("引用路径不存在：src/main.c", out)
+
+    def test_absolute_quoted_and_remote_refs(self) -> None:
+        spec = self.tmpdir / "doc dir" / "spec v1.docx"
+        spec.parent.mkdir()
+        spec.write_text("spec\n", encoding="utf-8")
+        missing = (self.tmpdir / "gone.pdf").as_posix()
+        write_csv(
+            self.csv_path,
+            [
+                task(
+                    id="T001",
+                    refs=f'FR-1 "{spec}" {missing} ssh@192.168.137.200 https://example.com/a',
+                ),
+                REVIEW,
+            ],
+        )
+        _, out, _ = self.run_cmd(["validate", str(self.csv_path)])
+        self.assertNotIn("refs-invalid", out)
+        self.assertIn(f"引用路径不存在：{missing}", out)
+        self.assertEqual(out.count("refs-not-found"), 1)
 
     def test_fr_headings_missing_warning(self) -> None:
         (self.tmpdir / "prd.md").write_text(
@@ -347,7 +367,6 @@ class WorklineCsvTests(unittest.TestCase):
             ["set", str(self.csv_path), "REVIEW", "--state", "done", "--commit", "no-change"]
         )
         (self.tmpdir / "brief.md").write_text("# b\n", encoding="utf-8")
-        (self.tmpdir / "references").mkdir(exist_ok=True)
         code, _, err = self.run_cmd(["archive-check", str(self.csv_path)])
         self.assertEqual(code, 1)
         self.assertIn("commit 为空", err)
@@ -492,7 +511,6 @@ class WorklineCsvTests(unittest.TestCase):
         self.assertFalse((active / "gates.csv").exists())
         self.assertIn("阶段门禁", (active / "run.md").read_text(encoding="utf-8"))
         self.assertTrue((active / "brief.md").exists())
-        self.assertTrue((active / "references").is_dir())
         self.assertIn("bulk import", (active / "brief.md").read_text(encoding="utf-8"))
 
         write_csv(
@@ -501,7 +519,6 @@ class WorklineCsvTests(unittest.TestCase):
         )
         (self.tmpdir / "brief.md").write_text("# brief\n", encoding="utf-8")
         self.write_run(complete_log() + "\n" + complete_log("REVIEW"))
-        (self.tmpdir / "references").mkdir(exist_ok=True)
         self.approve_execution()
         self.run_cmd(
             ["set", str(self.csv_path), "T001", "--state", "done", "--commit", "no-change"]
@@ -600,7 +617,7 @@ class WorklineCsvTests(unittest.TestCase):
         write_csv(self.csv_path, [task(id="T001", refs="../evil"), REVIEW])
         code, out, err = self.run_cmd(["validate", str(self.csv_path)])
         self.assertEqual(code, 0, err)
-        for fragment in ("FR-2", "references/", "evidence/", ".workline/notes/", "绝对路径"):
+        for fragment in ("FR-2", "evidence/", ".workline/notes/", "绝对路径", "双引号", "user@host"):
             self.assertIn(fragment, out)
 
     def test_blocked_message_explains_every_prefix(self) -> None:
@@ -708,20 +725,20 @@ class WorklineCsvTests(unittest.TestCase):
     def test_review_refs_do_not_cover_requirements(self) -> None:
         write_csv(
             self.csv_path,
-            [task(id="T001", refs="references/input.md"), task(id="REVIEW", refs="FR-1")],
+            [task(id="T001", refs="src/input.md"), task(id="REVIEW", refs="FR-1")],
         )
         _, out, _ = self.run_cmd(["validate", str(self.csv_path)])
         self.assertIn("fr-uncovered", out)
 
     def test_archive_blocks_dangling_refs(self) -> None:
-        references = self.tmpdir / "references"
-        references.mkdir(exist_ok=True)
-        material = references / "input.md"
+        evidence = self.tmpdir / "evidence" / "T001-smoke"
+        evidence.mkdir(parents=True, exist_ok=True)
+        material = evidence / "result.md"
         material.write_text("input\n", encoding="utf-8")
         write_csv(
             self.csv_path,
             [
-                task(id="T001", state="done", commit="no-change", refs="FR-1 references/input.md"),
+                task(id="T001", state="done", commit="no-change", refs="FR-1 evidence/T001-smoke/result.md"),
                 task(id="REVIEW", state="done", commit="no-change", refs=""),
             ],
         )
@@ -745,7 +762,7 @@ class WorklineCsvTests(unittest.TestCase):
             [
                 task(
                     id="T001",
-                    refs=r"FR-1 references/../secret evidence/./result references\outside",
+                    refs=r"FR-1 docs/../secret evidence/./result docs\outside",
                 ),
                 REVIEW,
             ],
@@ -820,17 +837,17 @@ class TwoRepoModelTests(unittest.TestCase):
         return digest[:12]
 
     def make_active(self, root: Path, repos_table: str) -> Path:
-        """标准布局的活动目录，brief.md 带指定的「## 代码仓库」表格内容。"""
+        """标准布局的活动目录，brief.md 材料清单带指定的仓库行。"""
         active = root / ".workline" / "active" / "2026-09-16-1000-demo"
         active.mkdir(parents=True)
-        (active / "references").mkdir()
         (active / "prd.md").write_text("### FR-1 导入\n", encoding="utf-8")
         (active / "brief.md").write_text(
-            "# Brief: demo\n\n## 代码仓库\n\n"
-            "<!-- 注释里的 | ignored/path | 不算登记 -->\n\n"
-            "| 仓库路径 | 说明 |\n| --- | --- |\n"
+            "# Brief: demo\n\n## 材料清单\n\n"
+            "<!-- 注释里的 | ignored/path | [仓库] 不算登记 -->\n\n"
+            "| 位置 | 用途 |\n| --- | --- |\n"
+            "| docs/spec.md | 方案文档，不是仓库 |\n"
             + repos_table
-            + "\n## 材料清单及用途\n\n| 路径 | 用途 | 来源 |\n| --- | --- | --- |\n",
+            + "\n## 其它\n\n| not/repo | [仓库] 不在材料清单里 |\n",
             encoding="utf-8",
         )
         template = (ROOT / "workline-init" / "templates" / "run.md").read_text(
@@ -857,7 +874,7 @@ class TwoRepoModelTests(unittest.TestCase):
         """workline 打开在父目录、代码在子目录：登记后真实哈希可核验。"""
         root = self.tmpdir / "RK3568"
         digest = self.make_repo(root / "project" / "commagc" / "agcavc", "app\n")
-        active = self.make_active(root, "| project/commagc/agcavc | 业务主仓库 |\n")
+        active = self.make_active(root, "| project/commagc/agcavc | [仓库] 业务主仓库 |\n")
         csv_path = active / "tasks.csv"
         write_csv(csv_path, [task(id="T001", state="doing"), REVIEW])
         self.approve(active)
@@ -872,7 +889,7 @@ class TwoRepoModelTests(unittest.TestCase):
         app_hash = self.make_repo(root / "project" / "agcavc", "app\n")
         self.assertNotEqual(kernel_hash, app_hash)
         active = self.make_active(
-            root, "| kernel | 内核 |\n| project/agcavc | 业务 |\n"
+            root, "| kernel | [仓库] 内核 |\n| project/agcavc | [仓库] 业务 |\n"
         )
         csv_path = active / "tasks.csv"
         write_csv(
@@ -934,7 +951,7 @@ class TwoRepoModelTests(unittest.TestCase):
     def test_declared_repo_that_is_not_a_repo_blocks(self) -> None:
         root = self.tmpdir / "proj"
         self.make_repo(root / "real", "x\n")
-        active = self.make_active(root, "| real | 真 |\n| missing/path | 假 |\n")
+        active = self.make_active(root, "| real | [仓库] 真 |\n| missing/path | [仓库] 假 |\n")
         csv_path = active / "tasks.csv"
         write_csv(csv_path, [task(id="T001"), REVIEW])
         _, out, _ = self.run_cmd(["validate", str(csv_path)])
@@ -946,14 +963,14 @@ class TwoRepoModelTests(unittest.TestCase):
         root = self.tmpdir / "RK3568"
         self.make_repo(root / "kernel", "k\n")
         (root / "kernel" / "file.txt").write_text("changed\n", encoding="utf-8")
-        active = self.make_active(root, "| kernel | 内核 |\n")
+        active = self.make_active(root, "| kernel | [仓库] 内核 |\n")
         csv_path = active / "tasks.csv"
         write_csv(csv_path, [task(id="T001"), REVIEW])
         _, out, _ = self.run_cmd(["validate", str(csv_path)])
         self.assertIn("worktree-dirty", out)
         self.assertIn("kernel/file.txt", out)
 
-    def test_init_creates_doc_repo_and_ignores_it_in_code_repo(self) -> None:
+    def test_init_creates_doc_repo(self) -> None:
         root = self.tmpdir / "proj"
         self.make_repo(root, "code\n")
         result = subprocess.run(
@@ -978,14 +995,7 @@ class TwoRepoModelTests(unittest.TestCase):
         ).stdout
         self.assertIn("workline: init", logged)
 
-        ignore_text = (root / ".gitignore").read_text(encoding="utf-8")
-        self.assertIn(".workline/", ignore_text)
-        status = subprocess.run(
-            ["git", "status", "--short"], cwd=root, capture_output=True, text=True,
-            check=True,
-        ).stdout
-        self.assertNotIn(".workline", status.replace(".gitignore", ""))
-        self.assertIn("## 代码仓库", (active / "brief.md").read_text(encoding="utf-8"))
+        self.assertIn("## 材料清单", (active / "brief.md").read_text(encoding="utf-8"))
 
     def test_init_is_idempotent_on_second_task(self) -> None:
         root = self.tmpdir / "proj"
@@ -1000,8 +1010,6 @@ class TwoRepoModelTests(unittest.TestCase):
                 env=git_env(identity=True),
             )
             self.assertEqual(result.returncode, 0, result.stderr)
-        ignore_text = (root / ".gitignore").read_text(encoding="utf-8")
-        self.assertEqual(ignore_text.count(".workline/"), 1, "gitignore 被重复追加")
         logged = subprocess.run(
             ["git", "log", "--oneline"],
             cwd=root / ".workline",

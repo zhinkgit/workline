@@ -1,6 +1,6 @@
 ---
 name: workline-init
-description: "判断粗需求是否需要 Workline，并在需要时初始化长任务过程目录。Use when the user wants to decide whether a request needs Workline, start a new long-task workflow, create a timestamped directory under .workline/active, or prepare brief.md, run.md and references before PRD grilling."
+description: "判断粗需求是否需要 Workline，并在需要时初始化长任务过程目录。Use when the user wants to decide whether a request needs Workline, start a new long-task workflow, create a timestamped directory under .workline/active, or prepare brief.md and run.md before PRD grilling."
 disable-model-invocation: true
 ---
 
@@ -39,7 +39,6 @@ disable-model-invocation: true
 4. 确认新目录包含：
    - `brief.md`
    - `run.md`
-   - `references/`
 5. 确认 `.workline/` 下已有独立的过程文档 Git 仓库（脚本自动建，见「两套版本管理」）。
 6. 返回活动目录路径，并按下节告诉用户他需要准备什么。
 
@@ -59,31 +58,24 @@ python <SKILL_DIR>/scripts/init_workline.py --root . --slug modify-agc-module --
 | 仓库 | 位置 | 管什么 | 谁提交 |
 | --- | --- | --- | --- |
 | 文档库 | `.workline/.git` | `brief.md`、`prd.md`、`tasks.csv`、`run.md`、`notes/` | `$workline-archive` |
-| 代码库 | `brief.md` 的「## 代码仓库」表里登记的路径 | 业务代码 | `$workline-run` 的提交收口 |
+| 代码库 | `brief.md` 材料清单里用途标 `[仓库]` 的路径 | 业务代码 | `$workline-run` 的提交收口 |
 
 这样 workline 打开在哪一层都不影响流程：打开在代码仓库根目录可以，打开在 `C:/Users/Public/RK3568` 这种父目录、代码散在 `project/commagc/agcavc` 子目录里也可以。
 
-脚本会做三件事，任何一件失败都只提示不阻断：
+脚本在 `.workline/` 下 `git init`（已存在则跳过），并把新建的活动目录提交一次作为基线；失败只提示不阻断。
 
-- `.workline/` 下 `git init`（已存在则跳过），并把新建的活动目录提交一次作为基线。
-- 若 `.workline/` 落在某个代码仓库内，往那个仓库的 `.gitignore` 追加一行 `.workline/`，避免过程文档混进代码提交、也避免 `git add` 撞上 embedded repository 陷阱。
-- `brief.md` 生成「## 代码仓库」空表，等 `$workline-grill` 填候选、用户确认。
+## 材料清单
 
-**代码仓库登记表**决定了后续 `tasks.csv` 里的提交哈希去哪核验：
+`brief.md` 只有一张「## 材料清单」表，两列：`位置`、`用途`。
 
-- workline 打开在代码仓库根目录 → 表留空即可，脚本自动认这个仓库。
-- 打开在父目录 → **必须登记**，否则真实哈希一律无法核验，只能写 `no-change`。
-- 一次任务动多个仓库 → 登记多行，脚本逐个仓库找哈希。
-- 纯文档 / 调研任务 → 表留空，所有任务的 `commit` 写 `no-change`。
+- `位置` 直接写材料在哪：本地绝对路径、相对 workline 根的路径、URL、`user@host` 都行，材料不复制进活动目录。
+- **代码仓库也登记在这张表里，用途以 `[仓库]` 开头**，例如 `| project/commagc/agcavc | [仓库] agcavc 模块源码 |`。这决定了后续 `tasks.csv` 里的提交哈希去哪核验：
+  - workline 打开在代码仓库根目录 → 不标也行，脚本自动认这个仓库。
+  - 打开在父目录 → **必须标**，否则真实哈希一律无法核验，只能写 `no-change`。
+  - 一次任务动多个仓库 → 标多行，脚本逐个仓库找哈希。
+  - 纯文档 / 调研任务 → 不标，所有任务的 `commit` 写 `no-change`。
 
-## 用户只负责仓库外的材料
-
-`brief.md` 的「材料清单及用途」表初始为空。**只让用户准备仓库里没有的东西**，两种登记方式二选一，不必都搬进 `references/`：
-
-- **放进 `references/` 再登记相对路径**：需要随归档保存、或要被 `tasks.csv` 的 `refs` 引用的材料，例如协议文档、网页保存件、外部审查意见、参考仓库软链接。
-- **直接在表里填外部绝对路径**：体积大、有独立版本管理、或只在澄清阶段用一次的材料，不必复制进活动目录。这类路径不能进 `refs`，需要它的结论要在澄清阶段固化进 `prd.md`。
-
-**本项目已有的文件和目录不用用户手动登记**：`$workline-grill` 会扫描仓库，把相关的仓库内路径作为候选行追加进这张表，由用户确认或剔除。不要让用户替 agent 干查证的活。
+**只让用户登记仓库里没有的东西。本项目已有的文件和目录不用用户手动登记**：`$workline-grill` 会扫描仓库，把相关的仓库内路径作为候选行追加进这张表，由用户确认或剔除。不要让用户替 agent 干查证的活。
 
 材料够不够由 `$workline-grill` 在澄清开始前评估并指出缺口。
 
@@ -102,10 +94,7 @@ python <SKILL_DIR>/scripts/init_workline.py --root . --slug modify-agc-module --
 - 新建活动目录路径（目录名为全英文 slug）。
 - `brief.md` 已写入创建时间和用户提供的原始粗需求。
 - `run.md` 已创建，内含「阶段门禁」表，四扇门都是未确认 / 未审查。
-- `references/` 已创建为空目录。
 - `.workline/` 下已建立独立的过程文档 Git 仓库，业务代码的版本管理仍归代码仓库自己；若脚本提示 git 不可用或提交失败，如实转达。
-- 若已往代码仓库的 `.gitignore` 追加 `.workline/`，说明这一步做了什么。
-- `brief.md` 多了一张「## 代码仓库」空表：workline 就开在代码仓库根目录时可以不管；开在父目录、代码在子目录时需要登记，否则后续提交哈希无法核验。
-- 请检查 `brief.md` 中的原始粗需求；材料表现在是空的，**只需准备仓库里没有的外部材料**：需要随归档保存或被 `refs` 引用的放进 `references/` 再登记相对路径，其余直接在表里填外部绝对路径即可，不必复制。
+- 请检查 `brief.md` 中的原始粗需求；材料清单现在是空的，**只需登记仓库里没有的外部材料**，直接填位置和用途，不必复制。代码在子目录的仓库时，用途以 `[仓库]` 开头登记，否则后续提交哈希无法核验。
 - 仓库内已有的文件目录不必手工登记，`$workline-grill` 会扫出候选清单请你确认。
-- 外部材料放好后使用 `$workline-grill`；它会先补全候选材料清单、评估是否够用，再开始分轮澄清。
+- 外部材料登记好后使用 `$workline-grill`；它会先补全候选材料清单、评估是否够用，再开始分轮澄清。

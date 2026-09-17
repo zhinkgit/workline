@@ -19,9 +19,9 @@ disable-model-invocation: true
 
 ## 入口检查
 
-用户必须提供活动目录、`prd.md` 或 `tasks.csv` 路径。定位活动目录后确认 `brief.md`、`references/`、`run.md` 存在且 `run.md` 含 `## 阶段门禁`；审查 PRD 需要 `prd.md`，审查任务需要 `prd.md` 和 `tasks.csv`。
+用户必须提供活动目录、`prd.md` 或 `tasks.csv` 路径。定位活动目录后确认 `brief.md`、`run.md` 存在且 `run.md` 含 `## 阶段门禁`；审查 PRD 需要 `prd.md`，审查任务需要 `prd.md` 和 `tasks.csv`。
 
-`run.md` 或门禁表缺失时停止并回到 `$workline-init`，不要另建一份门禁文件继续。外部 AI 或人工的审查意见文件按输入材料对待，放在 `references/` 下读取。
+`run.md` 或门禁表缺失时停止并回到 `$workline-init`，不要另建一份门禁文件继续。外部 AI 或人工的审查意见文件按输入材料对待，登记在 `brief.md` 材料清单里，按位置读取。
 
 先读门禁再选目标：
 
@@ -36,15 +36,14 @@ python <SKILL_DIR>/scripts/workline_csv.py gates .workline/active/<slug>
 
 ## PRD 审查
 
-读取 `brief.md`、`prd.md`、`references/` 一级目录和必要文件；材料清单里登记的仓库内相对路径或外部绝对路径按需读取；`.workline/notes/index.md` 存在时一并读取。
+读取 `brief.md`、`prd.md`；材料清单里登记的材料按需读取；`.workline/notes/index.md` 存在时一并读取。
 
 - 目标、非目标和范围边界是否明确。
 - 术语、输入输出、用户流程是否足以指导实现。
 - 功能要求是否可执行，是否全部使用 `### FR-<序号>` 编号，编号是否连续无重复、无空占位、无前导零。需要单独拆任务的非功能要求是否用 `### NFR-<序号>`。
 - 验收标准是否可验证，是否能映射到后续任务。
 - 「风险与待确认问题」是否还有阻塞任务拆分的内容。
-- 关键决策是否有来源，能否追溯到材料或澄清记录。外部绝对路径的材料不进 `refs`，其结论必须已固化进 `prd.md`。
-- `brief.md` 材料表里由 grill 追加的候选行是否已被用户确认；仍标 `agent 建议` 而 `materials` 已 `CONFIRMED`，说明确认流程被跳过。
+- 关键决策是否有来源，能否追溯到材料或澄清记录。
 - 是否已完成 PRD 收敛：有没有残留的中途假设、已解决却仍挂着的待确认问题、重复陈述。
 - 是否与 `.workline/notes/` 已有的项目约定冲突且未说明理由。
 - `materials` 是否为 `CONFIRMED` 或 `WAIVED`；仍是 `未确认` 则结论不得为 `PASS`。

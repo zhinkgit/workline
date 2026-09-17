@@ -61,12 +61,13 @@ BLOCKED_REASON_HINT = (
     '例如 --notes "wait-user: 等用户确认导入页提示"'
 )
 REFS_FORM_HINT = (
-    "refs 只接受四类，空格分隔："
+    "refs 空格分隔，含空格的路径用英文双引号包起来。可写："
     "FR-2 / NFR-1（prd.md 需求编号）；"
-    "references/xxx（活动目录下的输入材料）；"
-    "evidence/T001-xxx/（执行阶段产物）；"
-    "src/driver/uart.c 或 .workline/notes/uart.md（项目根下的仓库内材料）。"
-    "不接受外部绝对路径、. 与 .. 跳转、反斜杠，也不要写本任务要修改的目标文件。"
+    "evidence/T001-xxx/（执行阶段产物，相对活动目录）；"
+    "src/driver/uart.c 或 .workline/notes/uart.md（相对项目根）；"
+    '"D:/doc/spec v1.pdf" 这类本地绝对路径（校验存在）；'
+    "https://... 或 user@host 这类远程位置（不校验存在）。"
+    "相对路径不接受 . 与 .. 跳转和反斜杠；不要写本任务要修改的目标文件。"
 )
 VERIFICATION_HINT = (
     "verification 写「用什么手段、怎样算过」。"
@@ -88,16 +89,19 @@ PADDED_REQ_HEADING_RE = re.compile(r"^###\s+((?:FR|NFR)-0\d+)\b", re.MULTILINE)
 REQ_REF_RE = re.compile(r"\b(?:FR|NFR)-[1-9]\d*\b")
 PADDED_REQ_REF_RE = re.compile(r"\b(?:FR|NFR)-0\d+\b")
 FUNCTION_HEADING_RE = re.compile(r"^##\s+功能要求\s*$", re.MULTILINE)
-CODE_REPO_SECTION_RE = re.compile(
-    r"^##[ \t]+代码仓库[ \t]*$(.*?)(?=^##[ \t]+|\Z)",
+MATERIALS_SECTION_RE = re.compile(
+    r"^##[ \t]+材料清单[ \t]*$(.*?)(?=^##[ \t]+|\Z)",
     re.MULTILINE | re.DOTALL,
 )
-CODE_REPO_HEADER_CELLS = {"仓库路径", "路径"}
+CODE_REPO_MARK = "[仓库]"
 HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 NEXT_H2_RE = re.compile(r"^##\s+", re.MULTILINE)
 REF_REQ_TOKEN_RE = re.compile(r"^(?:FR|NFR)-[1-9]\d*$")
-ACTIVE_REF_PREFIXES = ("references/", "evidence/")
+ACTIVE_REF_PREFIXES = ("evidence/",)
 WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:")
+REF_TOKEN_RE = re.compile(r'"([^"]*)"|(\S+)')
+ABSOLUTE_REF_RE = re.compile(r"^(?:[A-Za-z]:[\\/]|/|\\\\)")
+REMOTE_REF_RE = re.compile(r"^(?:[A-Za-z][A-Za-z0-9+.-]*://\S+|[\w.-]+@[\w.-]+(?::\S*)?)$")
 TASK_ID_RE = re.compile(r"^T\d{3,}$")
 BLOCKING_WARNING_CODES = {
     "code-repo-invalid",
@@ -233,7 +237,8 @@ def split_deps(value: str) -> list[str]:
 
 
 def split_refs(value: str) -> list[str]:
-    return [item for item in value.split() if item]
+    """空格分隔；双引号包住的整体算一项，用于带空格的路径。"""
+    return [quoted or bare for quoted, bare in REF_TOKEN_RE.findall(value) if quoted or bare]
 
 
 def ref_path_is_safe(token: str) -> bool:
@@ -336,11 +341,11 @@ def read_brief_text(csv_path: Path) -> str | None:
 
 
 def read_declared_code_repos(csv_path: Path) -> list[str]:
-    """brief.md 的「## 代码仓库」表格里登记的仓库路径，相对 workline 根，保序去重。"""
+    """brief.md「## 材料清单」里用途以 [仓库] 开头的行，位置相对 workline 根或写绝对路径，保序去重。"""
     text = read_brief_text(csv_path)
     if text is None:
         return []
-    match = CODE_REPO_SECTION_RE.search(text)
+    match = MATERIALS_SECTION_RE.search(text)
     if not match:
         return []
     section = HTML_COMMENT_RE.sub("", match.group(1))
@@ -349,12 +354,10 @@ def read_declared_code_repos(csv_path: Path) -> list[str]:
         line = line.strip()
         if not line.startswith("|"):
             continue
-        cell = line.strip("|").split("|")[0].strip()
-        if not cell or set(cell) <= set("-: "):
+        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        if len(cells) < 2 or not cells[1].startswith(CODE_REPO_MARK):
             continue
-        if cell in CODE_REPO_HEADER_CELLS:
-            continue
-        cell = cell.strip("`").strip().replace("\\", "/").rstrip("/")
+        cell = cells[0].strip("`").strip().replace("\\", "/").rstrip("/")
         if cell and cell not in repos:
             repos.append(cell)
     return repos
@@ -411,7 +414,7 @@ def git_commit_exists(csv_path: Path, commit: str) -> bool | None:
 def code_repo_hint(csv_path: Path) -> str:
     repos, _ = code_repo_paths(csv_path)
     if not repos:
-        return "brief.md 的「## 代码仓库」没有登记可核验的仓库"
+        return f"brief.md 的材料清单里没有用途标 {CODE_REPO_MARK} 的可核验代码仓库"
     root = workline_root(csv_path)
     names = [repo_label(repo, root) for repo in repos]
     return "已登记的代码仓库：" + ", ".join(names)
@@ -972,8 +975,17 @@ def build_warnings(
                         "message": f"refs 含带前导零的编号 {token}，无法匹配 FR-1 / NFR-1",
                     }
                 )
-            elif REF_REQ_TOKEN_RE.fullmatch(token):
+            elif REF_REQ_TOKEN_RE.fullmatch(token) or REMOTE_REF_RE.fullmatch(token):
                 continue
+            elif ABSOLUTE_REF_RE.match(token):
+                if not Path(token).exists():
+                    warnings.append(
+                        {
+                            "code": "refs-not-found",
+                            "task_id": task_id,
+                            "message": f"引用路径不存在：{token}",
+                        }
+                    )
             elif not ref_path_is_safe(token):
                 warnings.append(
                     {
@@ -996,8 +1008,8 @@ def build_warnings(
                                 f"引用路径不存在：{token}（按 {base} 解析）。"
                                 + hint_once(
                                     "refs-not-found",
-                                    "references/ 和 evidence/ 相对活动目录，"
-                                    "其余相对项目根（含 .workline/ 的目录）",
+                                    "evidence/ 相对活动目录，"
+                                    "其余相对路径相对项目根（含 .workline/ 的目录）",
                                 )
                             ),
                         }
@@ -1010,7 +1022,7 @@ def build_warnings(
                 "code": "code-repo-invalid",
                 "task_id": "GIT",
                 "message": (
-                    "brief.md 登记的代码仓库不可用："
+                    f"brief.md 材料清单里标 {CODE_REPO_MARK} 的代码仓库不可用："
                     + ", ".join(invalid_repos)
                     + "（目录不存在、不在任何 Git 仓库内，或指向了 .workline 自身）"
                 ),
@@ -1509,13 +1521,8 @@ def command_archive_check(args: argparse.Namespace) -> int:
     warnings = build_warnings(rows, csv_path)
     errors: list[str] = []
 
-    required = ["brief.md", "prd.md", "tasks.csv", "run.md", "references"]
-    for name in required:
-        target = csv_path.parent / name
-        if name == "references":
-            if not target.is_dir():
-                errors.append("缺少 references/ 目录")
-        elif not target.exists():
+    for name in ("brief.md", "prd.md", "tasks.csv", "run.md"):
+        if not (csv_path.parent / name).exists():
             errors.append(f"缺少 {name}")
 
     review = rows[-1]

@@ -1,6 +1,6 @@
 ---
 name: workline-grill
-description: "Workline 需求澄清与 PRD 生成。Use when the user provides a Workline active directory, answers an in-progress Workline Grill clarification question, wants grill-style clarification rounds, wants to turn brief.md and references into prd.md, or wants to revise prd.md after Workline review before task splitting."
+description: "Workline 需求澄清与 PRD 生成。Use when the user provides a Workline active directory, answers an in-progress Workline Grill clarification question, wants grill-style clarification rounds, wants to turn brief.md and its registered materials into prd.md, or wants to revise prd.md after Workline review before task splitting."
 disable-model-invocation: true
 ---
 
@@ -10,7 +10,7 @@ disable-model-invocation: true
 
 ## 入口检查
 
-要求用户明确提供活动目录路径，例如 `.workline/active/2026-05-28-0915-example/`。开始前确认 `brief.md`、`references/` 存在，`run.md` 存在且含 `## 阶段门禁`。缺路径先要求用户提供；`run.md` 或门禁表缺失时停止并回到 `$workline-init`。
+要求用户明确提供活动目录路径，例如 `.workline/active/2026-05-28-0915-example/`。开始前确认 `brief.md` 存在，`run.md` 存在且含 `## 阶段门禁`。缺路径先要求用户提供；`run.md` 或门禁表缺失时停止并回到 `$workline-init`。
 
 材料确认和后续审查结论写在「阶段门禁」表，不要写进会被 PRD 收敛重写的正文。写入时调用已安装的 `$workline-review` / `$workline-tasks` / `$workline-run` / `$workline-archive` 中任意一份 `scripts/workline_csv.py`：
 
@@ -25,14 +25,14 @@ python <CSV_SCRIPT> gates-set .workline/active/<slug> --gate materials --status 
 **查证是你的活，不是用户的活。** `$workline-init` 只让用户准备仓库里没有的外部材料，仓库内的材料由你扫出来。
 
 1. 读 `.workline/notes/index.md`（存在时），按索引取用相关主题文件。这是本代码库已沉淀的约定和坑，优先于重新查证。
-2. 读 `brief.md`，取用户已登记的材料：`references/` 下的直接读；表里填的外部绝对路径尽量读，读不到时记为缺口，不要凭印象假设内容。
+2. 读 `brief.md` 的「## 材料清单」，按位置读取用户已登记的材料，读不到时记为缺口，不要凭印象假设内容。
 3. 按粗需求扫描仓库，找出实现和澄清真正会用到的既有文件、目录、配置，以及相关的 `.workline/notes/` 主题文件。
-4. 把找到的仓库内路径**追加**进「材料清单及用途」表，每行写清用途，来源列写 `agent 建议`。宁可少列几条准确的，也不要把半个仓库倒进表里。
-5. 补全「## 代码仓库」表：从 workline 根（含 `.workline/` 的目录）向下扫描含 `.git` 的目录，深度 3 层内，跳过 `.workline/` 自身和 `node_modules`、`build`、`out` 这类产物目录；把本次需求会改动的仓库追加为候选行，说明列写清为什么相关。
+4. 把找到的路径**追加**进材料清单表尾，每行写清用途。宁可少列几条准确的，也不要把半个仓库倒进表里。
+5. 核对代码仓库：从 workline 根（含 `.workline/` 的目录）向下扫描含 `.git` 的目录，深度 3 层内，跳过 `.workline/` 自身和 `node_modules`、`build`、`out` 这类产物目录。本次需求会改动的仓库，用户已登记的把用途补上 `[仓库]` 前缀，未登记的追加一行，用途以 `[仓库]` 开头并写清为什么相关。
 
-这张表决定执行阶段的提交哈希去哪核验，三种情况留空即可：workline 根本身就是代码仓库且只改它一个（脚本自动认）、纯文档或调研任务不会产生代码提交、扫不到任何 `.git`。后两种要在评估里告诉用户执行阶段只能写 `no-change`。
+`[仓库]` 行决定执行阶段的提交哈希去哪核验，三种情况可以一行都不标：workline 根本身就是代码仓库且只改它一个（脚本自动认）、纯文档或调研任务不会产生代码提交、扫不到任何 `.git`。后两种要在评估里告诉用户执行阶段只能写 `no-change`。
 
-追加只在两张表的表尾进行：不得修改、删除或重排用户自己写的行，不得改动 `brief.md` 的其它章节。
+对用户已写的行只允许补 `[仓库]` 前缀，不得删改其它内容或重排；不得改动 `brief.md` 的其它章节。
 
 ## 第二步：材料充分性评估
 
@@ -43,9 +43,9 @@ python <CSV_SCRIPT> gates-set .workline/active/<slug> --gate materials --status 
 1. 我扫出来的这几条候选材料和代码仓库对不对？哪些该剔除、哪些用途写偏了？
 2. 仓库里没有、需要你提供的材料还缺什么？
 
-用户确认后修正表格：剔除的行删掉，保留的行来源列改成 `已确认`；代码仓库表同样按确认结果删改。
+用户确认后修正表格：剔除的行删掉，用途写偏的改正，`[仓库]` 标记按确认结果增删。
 
-代码仓库登记了却指向不存在的目录、或指向不在任何 Git 仓库内的路径时，`validate` 会报阻断级 `code-repo-invalid`，`tasks-review` 门禁过不去，所以在这一步就要核对路径写对了没有。
+标了 `[仓库]` 的位置指向不存在的目录、或指向不在任何 Git 仓库内的路径时，`validate` 会报阻断级 `code-repo-invalid`，`tasks-review` 门禁过不去，所以在这一步就要核对路径写对了没有。
 
 - 材料已齐 → `materials` 写 `CONFIRMED`，进入提问轮次。
 - 用户允许在材料不足时开始 → 写 `WAIVED`，在 `notes` 说明缺了什么。
@@ -84,7 +84,7 @@ python <CSV_SCRIPT> gates-set .workline/active/<slug> --gate materials --status 
 
 用 `templates/prd.md` 在活动目录下创建或更新草稿态 `prd.md`，把 `{{title}}` 替换为活动目录名。第一版只是工作底稿，不代表澄清完成。每轮收到回答后先更新相关章节和「关键决策与澄清记录」，再重算 frontier 提出下一轮。
 
-用户要求按审查意见修订时，先读 `prd.md` 中「关键决策与澄清记录」「风险与待确认问题」两张表已登记的审查结论，以及 `references/` 中的外部审查意见文件。
+用户要求按审查意见修订时，先读 `prd.md` 中「关键决策与澄清记录」「风险与待确认问题」两张表已登记的审查结论，以及材料清单里登记的外部审查意见文件。
 
 ### 功能要求编号
 
@@ -116,7 +116,7 @@ python <CSV_SCRIPT> gates-set .workline/active/<slug> --gate materials --status 
 
 - PRD 只保留关键问答和决策。
 - 不在材料充分性评估之前开始提问。
-- 对 `brief.md` 只在材料表尾追加候选行，不改用户已写的行，不动其它章节。
+- 对 `brief.md` 只在材料清单表尾追加候选行、给用户已写的行补 `[仓库]` 前缀，不改其它内容，不动其它章节。
 - 澄清完成后不得调用 `$workline-tasks`，必须先跑 `$workline-review`。
 
 ## 输出

@@ -20,13 +20,13 @@
 
 完成任务真正需要的东西——参考实现、协议、样例、旧代码、外部意见——在 `brief.md` 的材料清单里登记路径和用途。
 
-**责任是分开的**：仓库里没有的东西由你准备，两种登记方式二选一——需要随归档保存或被 `refs` 引用的放进活动目录的 `references/` 再登记相对路径，其余直接在表里填外部绝对路径，不必复制；仓库里已有的文件目录由 `workline-grill` 扫出来追加成候选行，你只需确认或剔除。查证是 agent 的活，不是你的活。
+**责任是分开的**：仓库里没有的东西由你登记，直接填位置（绝对路径、URL、`user@host` 都行）和用途，不必复制；仓库里已有的文件目录由 `workline-grill` 扫出来追加成候选行，你只需确认或剔除。查证是 agent 的活，不是你的活。
 
 澄清开始前先评估材料够不够。不够就指出缺口并停下，而不是用提问向用户索取本该由文件提供的信息。材料不足时硬开问，后面所有决策都会漂在口头转述上。
 
 ### 2. 再澄清代码库和物料里拿不到的信息，得出执行方案
 
-代码、`references/`、已有项目笔记能回答的，自己查，不要问。只问这些地方永远给不出的判断：意图、范围、优先级、风险容忍、期望验收行为。
+代码、已登记的材料、已有项目笔记能回答的，自己查，不要问。只问这些地方永远给不出的判断：意图、范围、优先级、风险容忍、期望验收行为。
 
 仓库里已有某种写法，只是候选方案，不是决策。尤其是接口、数据格式、删除和兼容性，不能用「现有代码就是这么写的」代替确认。
 
@@ -60,7 +60,7 @@ flowchart TD
 
 | 阶段 | Skill | 产物 |
 | --- | --- | --- |
-| 1 备齐物料 | `workline-init` 建目录；你登记仓库外的材料（放进 `references/` 或直接填外部路径）；`workline-grill` 扫仓库补候选清单并评估是否够用 | `brief.md`、`references/` |
+| 1 备齐物料 | `workline-init` 建目录；你登记仓库外的材料；`workline-grill` 扫仓库补候选清单并评估是否够用 | `brief.md` |
 | 2 得出方案 | `workline-grill` 分轮提问并写 PRD；`workline-review` 审查 | `prd.md` |
 | 3 可测步骤 | `workline-tasks` 拆表；`workline-review` 再审；你确认后 `workline-run` 按表执行 | `tasks.csv`、`run.md` |
 | 4 沉淀复用 | `workline-archive` 检查闭环、写 notes、挂索引、搬进 archive | `.workline/notes/`、`.workline/archive/` |
@@ -76,27 +76,26 @@ flowchart TD
 │   └── index.md
 ├── active/
 │   └── 2026-05-28-0915-example/    ← 进行中的一次长任务
-│       ├── brief.md                ← 粗需求 + 代码仓库登记 + 材料登记
+│       ├── brief.md                ← 粗需求 + 材料清单（含 [仓库] 行）
 │       ├── prd.md                  ← 执行方案
 │       ├── tasks.csv               ← 可测步骤和状态
-│       ├── run.md                  ← 阶段门禁 + 执行日志
-│       └── references/             ← 需要随归档保存的外部物料；其余外部材料在 brief.md 里填绝对路径
+│       └── run.md                  ← 阶段门禁 + 执行日志
 └── archive/
     └── 2026-05/                    ← 完成后按月归档
 ```
 
 ### 两套版本管理
 
-过程文档和业务代码分开管：`.workline/.git` 管 `brief.md`、`prd.md`、`tasks.csv`、`run.md`、`notes/`，由 `workline-archive` 提交；业务代码归代码仓库自己，由 `workline-run` 每个任务收口时提交。`workline-init` 会自动建文档库，并在 `.workline/` 落在代码仓库内时往那个仓库的 `.gitignore` 追加 `.workline/`。
+过程文档和业务代码分开管：`.workline/.git` 管 `brief.md`、`prd.md`、`tasks.csv`、`run.md`、`notes/`，由 `workline-archive` 提交；业务代码归代码仓库自己，由 `workline-run` 每个任务收口时提交。`workline-init` 会自动建文档库。
 
-所以 workline 打开在哪一层都行。代码仓库在哪由 `brief.md` 的「## 代码仓库」表决定：
+所以 workline 打开在哪一层都行。代码仓库在哪由 `brief.md` 材料清单里用途以 `[仓库]` 开头的行决定：
 
 | 场景 | 怎么填 |
 | --- | --- |
-| 打开在代码仓库根目录 | 留空，脚本自动认这个仓库 |
-| 打开在父目录，代码在子目录（如 `RK3568/` 下的 `project/commagc/agcavc`） | 登记子目录路径 |
-| 一次任务动多个仓库 | 登记多行，标 done 时逐个仓库找哈希 |
-| 纯文档 / 调研 | 留空，`commit` 全写 `no-change` |
+| 打开在代码仓库根目录 | 不标，脚本自动认这个仓库 |
+| 打开在父目录，代码在子目录（如 `RK3568/` 下的 `project/commagc/agcavc`） | 登记子目录路径，用途标 `[仓库]` |
+| 一次任务动多个仓库 | 标多行，标 done 时逐个仓库找哈希 |
+| 纯文档 / 调研 | 不标，`commit` 全写 `no-change` |
 
 登记了却用不了的路径会报阻断级 `code-repo-invalid`。
 
@@ -115,7 +114,7 @@ flowchart TD
 | `verification` | 用什么手段、怎样算过。可以是命令行、Skill 或其他工具 |
 | `state` | `todo` → `doing` → `done`；条件不够则 `blocked`，确认跳过则 `skipped` |
 | `commit` | 本步业务提交的哈希，在 `brief.md` 登记的代码仓库里核验；无改动写 `no-change` |
-| `refs` | 执行时加载的材料：`FR-2`、`references/`、`evidence/`、仓库内相对路径（含 `.workline/notes/`）；不写外部绝对路径，也不写本任务要改的目标文件 |
+| `refs` | 执行时加载的材料：`FR-2`、`evidence/`、仓库内相对路径（含 `.workline/notes/`）、绝对路径、URL；带空格的路径用双引号包住；不写本任务要改的目标文件 |
 | `notes` | 阻塞、跳过、commit 为空等短备注 |
 
 前 6 列是计划，审查通过后不要改；后 4 列是执行状态。中途加任务用脚本的 `add`，不要手改表头。
@@ -153,7 +152,7 @@ ERROR: state=blocked 的 notes 必须以分类前缀开头，按原因选一个�
 
 ```text
 .workline/active/<slug>/
-    brief.md + references/     你登记仓库外物料；grill 补齐仓库内候选清单和代码仓库
+    brief.md                   你登记仓库外物料；grill 补齐仓库内候选清单和 [仓库] 行
             │
             ▼  $workline-grill
         prd.md                 分轮澄清后的执行方案
