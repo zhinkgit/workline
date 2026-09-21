@@ -31,6 +31,15 @@ python <SKILL_DIR>/scripts/workline_csv.py require-gates .workline/active/<slug>
 
 如果 PRD 不满足以上条件，停止并指出缺口。
 
+门禁通过后先提交快照，交付前再提交一次：
+
+```bash
+python <SKILL_DIR>/scripts/workline_csv.py snapshot .workline/active/<slug> --stage "进入 tasks"
+python <SKILL_DIR>/scripts/workline_csv.py snapshot .workline/active/<slug> --stage "tasks 完成"
+```
+
+没有变更时脚本自动跳过。提示没有文档库或提交失败时如实转告用户，不阻断本阶段。
+
 ## tasks.csv 十列
 
 `id`（`T` 加至少三位数字，末行固定 `REVIEW`）、`depends_on`（空格分隔的任务 ID，普通任务不得依赖 `REVIEW`，`REVIEW` 行留空）、`mode`、`title`、`description`（范围和实现说明，验证覆盖不到的完成标准也写这里）、`verification`、`state`、`commit`（7–64 位十六进制哈希 / `no-change` / 留空）、`refs`（空格分隔，带空格的路径用英文双引号包住）、`notes`。

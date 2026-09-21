@@ -993,7 +993,7 @@ class TwoRepoModelTests(unittest.TestCase):
             text=True,
             check=True,
         ).stdout
-        self.assertIn("workline: init", logged)
+        self.assertRegex(logged, r"workline: \S+ init")
 
         self.assertIn("## 材料清单", (active / "brief.md").read_text(encoding="utf-8"))
 
@@ -1034,6 +1034,108 @@ class TwoRepoModelTests(unittest.TestCase):
         self.assertTrue(Path(result.stdout.strip()).is_dir())
         self.assertTrue((root / ".workline" / ".git").exists())
         self.assertIn("提交失败", result.stderr)
+
+
+class SnapshotTests(unittest.TestCase):
+    """snapshot 把活动目录的四个过程文件提交进 .workline/ 文档库。"""
+
+    def setUp(self) -> None:
+        self.tmpdir = Path(tempfile.mkdtemp(prefix="wlsnap-"))
+        self.workline = self.tmpdir / ".workline"
+        self.active = self.workline / "active" / "2026-09-21-1000-demo"
+        self.active.mkdir(parents=True)
+        (self.active / "brief.md").write_text("# brief\n", encoding="utf-8")
+        (self.active / "run.md").write_text("# run\n", encoding="utf-8")
+
+    def git(self, *args: str) -> str:
+        return subprocess.run(
+            ["git", *args],
+            cwd=self.workline,
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        ).stdout
+
+    def init_doc_repo(self) -> None:
+        self.git("init")
+        self.git("config", "user.email", "wl@test")
+        self.git("config", "user.name", "wl")
+
+    def snapshot(self, stage: str) -> tuple[int, str, str]:
+        from io import StringIO
+
+        args = M.build_parser().parse_args(["snapshot", str(self.active), "--stage", stage])
+        stdout, stderr = StringIO(), StringIO()
+        old_out, old_err = sys.stdout, sys.stderr
+        sys.stdout, sys.stderr = stdout, stderr
+        try:
+            code = args.func(args)
+        except M.WorklineCsvError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            code = 1
+        finally:
+            sys.stdout, sys.stderr = old_out, old_err
+        return code, stdout.getvalue(), stderr.getvalue()
+
+    def test_snapshot_commits_human_edits_and_skips_when_unchanged(self) -> None:
+        self.init_doc_repo()
+        code, out, err = self.snapshot("进入 grill")
+        self.assertEqual(code, 0, err)
+        self.assertIn("已提交快照", out)
+
+        (self.active / "brief.md").write_text("# brief\n\n用户补充的材料\n", encoding="utf-8")
+        code, out, _ = self.snapshot("grill 完成")
+        self.assertEqual(code, 0)
+        self.assertIn("已提交快照", out)
+
+        code, out, _ = self.snapshot("进入 review prd")
+        self.assertEqual(code, 0)
+        self.assertIn("无变更", out)
+
+        log = self.git("log", "--format=%s")
+        self.assertEqual(
+            log.strip().splitlines(),
+            [
+                "workline: 2026-09-21-1000-demo grill 完成",
+                "workline: 2026-09-21-1000-demo 进入 grill",
+            ],
+        )
+
+    def test_snapshot_only_commits_the_four_process_files(self) -> None:
+        self.init_doc_repo()
+        evidence = self.active / "evidence" / "T001-log"
+        evidence.mkdir(parents=True)
+        (evidence / "big.log").write_text("x\n", encoding="utf-8")
+        notes = self.workline / "notes"
+        notes.mkdir()
+        (notes / "index.md").write_text("# notes\n", encoding="utf-8")
+        self.git("add", "notes/index.md")
+
+        code, _, err = self.snapshot("进入 grill")
+        self.assertEqual(code, 0, err)
+        committed = self.git("show", "--name-only", "--format=", "HEAD").split()
+        self.assertEqual(
+            sorted(committed),
+            [
+                "active/2026-09-21-1000-demo/brief.md",
+                "active/2026-09-21-1000-demo/run.md",
+            ],
+        )
+        self.assertIn("A  notes/index.md", self.git("status", "--short"), "预先暂存的 notes 不该被捎带")
+
+    def test_snapshot_without_doc_repo_only_warns(self) -> None:
+        code, out, err = self.snapshot("进入 grill")
+        self.assertEqual(code, 0)
+        self.assertIn("没有文档 Git 仓库", err)
+        self.assertNotIn("已提交快照", out)
+
+    def test_snapshot_outside_workline_is_rejected(self) -> None:
+        loose = self.tmpdir / "loose"
+        loose.mkdir()
+        args = M.build_parser().parse_args(["snapshot", str(loose), "--stage", "x"])
+        with self.assertRaises(M.WorklineCsvError):
+            args.func(args)
 
 
 if __name__ == "__main__":

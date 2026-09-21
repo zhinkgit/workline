@@ -1579,6 +1579,75 @@ def command_archive_check(args: argparse.Namespace) -> int:
     return 0
 
 
+SNAPSHOT_FILES = ("brief.md", "prd.md", "tasks.csv", "run.md")
+
+
+def run_doc_git(workline_dir: Path, git_args: list[str]) -> subprocess.CompletedProcess[str]:
+    try:
+        return subprocess.run(
+            ["git", *git_args],
+            cwd=str(workline_dir),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return subprocess.CompletedProcess(git_args, 1, "", str(exc))
+
+
+def command_snapshot(args: argparse.Namespace) -> int:
+    """把活动目录的过程文件提交进 .workline/ 文档库，标记一次阶段进出。
+
+    文档库缺失或提交失败只提示不阻断：过程文档的版本记录不能卡住主流程。
+    """
+    stage = args.stage.strip()
+    if not stage:
+        raise WorklineCsvError("--stage 不能为空，写阶段标记，如「进入 grill」「T001 done」")
+    target = Path(args.path).resolve()
+    active_dir = target if target.is_dir() else target.parent
+    workline_dir = next(
+        (parent for parent in active_dir.parents if parent.name == ".workline"), None
+    )
+    if workline_dir is None:
+        raise WorklineCsvError(f"{active_dir} 不在 .workline/ 目录下，找不到文档库")
+    if not (workline_dir / ".git").exists():
+        print(
+            f"NOTICE: {workline_dir} 下没有文档 Git 仓库，跳过快照；"
+            "过程文档不会有这一阶段的版本记录",
+            file=sys.stderr,
+        )
+        return 0
+
+    paths = [
+        (active_dir / name).relative_to(workline_dir).as_posix()
+        for name in SNAPSHOT_FILES
+        if (active_dir / name).is_file()
+    ]
+    if not paths:
+        raise WorklineCsvError(f"{active_dir} 下没有 brief.md / prd.md / tasks.csv / run.md")
+
+    added = run_doc_git(workline_dir, ["add", "--", *paths])
+    if added.returncode != 0:
+        print(f"NOTICE: 快照暂存失败：{(added.stderr or added.stdout).strip()}", file=sys.stderr)
+        return 0
+    unchanged = run_doc_git(workline_dir, ["diff", "--cached", "--quiet", "--", *paths])
+    if unchanged.returncode == 0:
+        print(f"OK: 过程文件无变更，跳过快照（{stage}）")
+        return 0
+
+    message = f"workline: {active_dir.name} {stage}"
+    committed = run_doc_git(workline_dir, ["commit", "-m", message, "--", *paths])
+    if committed.returncode != 0:
+        print(
+            f"NOTICE: 快照提交失败：{(committed.stderr or committed.stdout).strip()}",
+            file=sys.stderr,
+        )
+        return 0
+    head = run_doc_git(workline_dir, ["rev-parse", "--short=12", "HEAD"]).stdout.strip()
+    print(f"OK: 已提交快照 {head} {message}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Workline CSV helper")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -1661,6 +1730,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     archive_parser.add_argument("csv_path")
     archive_parser.set_defaults(func=command_archive_check)
+
+    snapshot_parser = subparsers.add_parser(
+        "snapshot", help="commit process files into the .workline doc repo at a stage boundary"
+    )
+    snapshot_parser.add_argument("path", help="active directory, tasks.csv or run.md")
+    snapshot_parser.add_argument("--stage", required=True, help="stage marker, e.g. 进入 grill")
+    snapshot_parser.set_defaults(func=command_snapshot)
     return parser
 
 

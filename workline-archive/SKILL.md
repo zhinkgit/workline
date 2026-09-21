@@ -16,6 +16,14 @@ disable-model-invocation: true
 
 先确认活动目录包含 `brief.md`、`prd.md`、`tasks.csv`、`run.md`，任何一项缺失都停止，不得移动目录。
 
+先提交一次文档库快照，记下 REVIEW 收尾后的最终过程文件：
+
+```bash
+python <SKILL_DIR>/scripts/workline_csv.py snapshot .workline/active/<slug> --stage "进入 archive"
+```
+
+没有变更时脚本自动跳过。提示没有文档库或提交失败时如实转告用户，不阻断本阶段。
+
 最终审计由 `REVIEW` 行负责，本 Skill 只做搬运前硬检查：
 
 ```bash
@@ -99,9 +107,12 @@ mkdir -p ".workline/archive/<YYYY-MM>" && mv ".workline/active/<slug>" ".worklin
 
 `evidence/` 作为过程材料保留在归档目录中，不进入这次提交。这意味着它们默认只保证当前工作区可追溯：重新克隆后归档目录里指向 `evidence/` 的 `refs` 会失效。需要跨机器审计时先检查体积和敏感信息，再由用户明确决定是否加入 Git 或外部制品库。
 
+活动目录里的过程文件在 init 和各阶段快照时已经进了文档库，搬走后要把旧位置的删除一起提交，否则文档库会一直挂着一批未提交的删除：
+
 ```powershell
+git -C .workline rm -r -q --cached --ignore-unmatch -- "active/<slug>"
 git -C .workline add -- "archive/<YYYY-MM>/<slug>/brief.md" "archive/<YYYY-MM>/<slug>/prd.md" "archive/<YYYY-MM>/<slug>/tasks.csv" "archive/<YYYY-MM>/<slug>/run.md" "notes/index.md" "notes/<主题>.md"
-git -C .workline commit -m "workline: archive <slug>"
+git -C .workline commit -m "workline: <slug> archive"
 ```
 
 `.workline/` 下没有 Git 仓库时（`$workline-init` 建库失败，或活动目录是手工建的），跳过提交，把归档结果和「过程文档没有版本记录」一并报告，不要退回去往代码仓库里提交。

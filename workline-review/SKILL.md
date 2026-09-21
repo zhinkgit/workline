@@ -34,6 +34,14 @@ python <SKILL_DIR>/scripts/workline_csv.py gates .workline/active/<slug>
 | `prd` | `prd.md` 刚生成、`$workline-tasks` 尚未开始，或用户要求再审需求 | `prd-review` |
 | `tasks` | `tasks.csv` 刚生成、执行尚未开始，或用户要求再审任务拆分 | `tasks-review` |
 
+选定目标后先提交快照，记下审查前的产物和用户手改：
+
+```bash
+python <SKILL_DIR>/scripts/workline_csv.py snapshot .workline/active/<slug> --stage "进入 review <目标>"
+```
+
+没有变更时脚本自动跳过。提示没有文档库或提交失败时如实转告用户，不阻断本阶段。
+
 ## PRD 审查
 
 读取 `brief.md`、`prd.md`；材料清单里登记的材料按需读取；`.workline/notes/index.md` 存在时一并读取。
@@ -82,6 +90,12 @@ python <SKILL_DIR>/scripts/workline_csv.py gates-set .workline/active/<slug> --g
 
 `--actor` 区分审查方：`same-session` 是当前会话的必审，换模型或换 agent 再审用 `external-agent` 或具体模型名。
 
+写完门禁后提交快照，记下修订点和审查结论：
+
+```bash
+python <SKILL_DIR>/scripts/workline_csv.py snapshot .workline/active/<slug> --stage "review <目标> <结论>"
+```
+
 `prd-review` 写成 `PASS` / `REVISE` / `BLOCKED` 都会把 `tasks-review` 和 `execute` 重置为未完成。这是故意的：PRD 有实质修订后再通过，旧任务表不能继续当作已审。只有在**任务表已审之后的 PRD 加审、且本次没改 PRD 正文**时才加 `--keep-downstream`；脚本会核对摘要，PRD 已改时该开关也会失败。第一次 PRD 必审不要加。
 
 任务审查 `PASS` 后先请求执行确认，用户明确同意再写：
@@ -89,6 +103,8 @@ python <SKILL_DIR>/scripts/workline_csv.py gates-set .workline/active/<slug> --g
 ```bash
 python <SKILL_DIR>/scripts/workline_csv.py gates-set .workline/active/<slug> --gate execute --status CONFIRMED --actor user
 ```
+
+写完后提交快照，`--stage "execute CONFIRMED"`。
 
 用户未确认时不要写 `CONFIRMED`，也不要启动 `$workline-run`。
 

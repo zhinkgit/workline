@@ -20,6 +20,20 @@ python <CSV_SCRIPT> gates-set .workline/active/<slug> --gate materials --status 
 
 找不到脚本时停止并报告，不得手改门禁表绕过校验。
 
+## 文档库快照
+
+每次进出本阶段都用同一个 `<CSV_SCRIPT>` 把过程文件提交进 `.workline/` 文档库：
+
+```bash
+python <CSV_SCRIPT> snapshot .workline/active/<slug> --stage "进入 grill"
+python <CSV_SCRIPT> snapshot .workline/active/<slug> --stage "grill 完成"
+```
+
+- **进入**：入口检查通过、动手补材料清单之前提交，把用户在 init 之后手改的 `brief.md` 原样记下，和你随后追加的候选行分开。
+- **完成**：宣布澄清完成、请求进入 `$workline-review` 之前提交，记下 `prd.md`、补全后的材料清单和 `materials` 门禁。被审查退回来修订时同样进出各一次。
+
+没有变更时脚本自动跳过。提示没有文档库或提交失败时如实转告用户，不阻断本阶段。
+
 ## 第一步：补全候选材料清单
 
 **查证是你的活，不是用户的活。** `$workline-init` 只让用户准备仓库里没有的外部材料，仓库内的材料由你扫出来。

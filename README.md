@@ -86,7 +86,9 @@ flowchart TD
 
 ### 两套版本管理
 
-过程文档和业务代码分开管：`.workline/.git` 管 `brief.md`、`prd.md`、`tasks.csv`、`run.md`、`notes/`，由 `workline-archive` 提交；业务代码归代码仓库自己，由 `workline-run` 每个任务收口时提交。`workline-init` 会自动建文档库。
+过程文档和业务代码分开管：`.workline/.git` 管 `brief.md`、`prd.md`、`tasks.csv`、`run.md`、`notes/`；业务代码归代码仓库自己，由 `workline-run` 每个任务收口时提交。`workline-init` 会自动建文档库并提交基线。
+
+文档库按阶段及时提交：每个 Skill 进入和结束时各调一次 `workline_csv.py snapshot`，`workline-run` 每条任务落定状态后再调一次，`workline-archive` 最后提交归档搬迁。进入时的快照专门记下你在两个阶段之间手改的内容，`git -C .workline log` 就是这次任务的完整过程史。
 
 所以 workline 打开在哪一层都行。代码仓库在哪由 `brief.md` 材料清单里用途以 `[仓库]` 开头的行决定：
 

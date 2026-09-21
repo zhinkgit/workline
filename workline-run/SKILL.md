@@ -43,7 +43,7 @@ python <SKILL_DIR>/scripts/workline_csv.py next <tasks.csv>
 python <SKILL_DIR>/scripts/workline_csv.py gates-set <active-dir> --gate execute --status CONFIRMED --actor user
 ```
 
-1. `require-gates` 或 `validate` 失败时不开始实现。门禁 PASS 后改过 PRD 或任务定义，必须回到对应审查阶段。
+1. `require-gates` 或 `validate` 失败时不开始实现。门禁 PASS 后改过 PRD 或任务定义，必须回到对应审查阶段。通过后先提交一次文档库快照 `snapshot <active-dir> --stage "进入 run"`（恢复执行也一样），见「文档库快照」。
 2. `next` 返回的任务就是本轮执行对象；`on_complete` 列出的收尾动作必须真实执行。
 3. `next` 优先选 AFK。`hitl=true` 时先请求用户，本轮无法参与则标 `blocked` 写 `wait-user:`，不要保持 `doing`。
 4. `next` 的 `blocked` 字段按前缀归类当前阻塞任务。报告用户时按类说，不要笼统说「有几个 blocked」；`unclassified` 是历史遗留，补上前缀。
@@ -123,6 +123,16 @@ python <SKILL_DIR>/scripts/workline_csv.py set <tasks.csv> T001 --state done --c
 
 脚本写入前强制回查完整的 `run.md` 小节和 commit 真实性。不要为了通过校验伪造日志或哈希。
 
+## 文档库快照
+
+代码提交之外，过程文件另外提交进 `.workline/` 文档库，两边互不混用。每条任务的状态落定为 `done` / `blocked` / `skipped` 后立即提交一次：
+
+```bash
+python <SKILL_DIR>/scripts/workline_csv.py snapshot <active-dir> --stage "T001 done"
+```
+
+`--stage` 写 `<任务 ID> <新状态>`，`REVIEW` 行同样如此。这样中途中断时，文档库里能看到执行推进到哪一步。没有变更时脚本自动跳过。提示没有文档库或提交失败时如实转告用户，不阻断本阶段。
+
 ## 失败与阻塞
 
 验证失败不得标 `done`。能继续修就保持 `doing`；本轮不再推进则标 `blocked`，`notes` 必须带分类前缀：
@@ -164,7 +174,7 @@ python <SKILL_DIR>/scripts/workline_csv.py add <tasks.csv> T012 --mode AFK --tit
 - `tasks.csv` 始终是计划和状态源，状态字段只用 `workline_csv.py set` 更新。
 - 四扇门按顺序通过且产物摘要仍然有效，否则不得开工。
 - 通过结论必须有真实验证依据；先写完整 `run.md` 小节再标 `done`。
-- 任务级提交不得包含 `.workline/`；执行阶段不扩展需求范围。
+- 任务级提交不得包含 `.workline/`，过程文件只经 `snapshot` 进文档库；执行阶段不扩展需求范围。
 - 同一活动目录只允许一个执行者写入；外部审查与执行必须串行。
 
 ## 输出

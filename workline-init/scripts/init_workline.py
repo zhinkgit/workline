@@ -71,22 +71,6 @@ def run_git(args: list[str], cwd: Path) -> bool:
     return result.returncode == 0
 
 
-def git_repo_root(cwd: Path) -> Path | None:
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            cwd=str(cwd),
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    if result.returncode != 0:
-        return None
-    return Path(result.stdout.strip())
-
-
 def ensure_doc_repo(workline_dir: Path, active_dir: Path) -> None:
     """过程文档用 .workline/ 下的独立 Git 仓库管理，和代码仓库彻底分开。
 
@@ -105,7 +89,7 @@ def ensure_doc_repo(workline_dir: Path, active_dir: Path) -> None:
     rel = active_dir.relative_to(workline_dir).as_posix()
     if not run_git(["add", "--", rel], workline_dir):
         return
-    if not run_git(["commit", "-m", f"workline: init {active_dir.name}"], workline_dir):
+    if not run_git(["commit", "-m", f"workline: {active_dir.name} init"], workline_dir):
         print(
             "NOTICE: 文档仓库暂存成功但提交失败（通常是没配 git user.name / user.email），"
             "补好后自行提交即可",
