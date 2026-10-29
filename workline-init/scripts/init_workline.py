@@ -15,6 +15,9 @@ from pathlib import Path
 MAX_TOKEN_CHARS = 16
 MAX_SLUG_CHARS = 40
 SLUG_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+DOC_GITIGNORE = """evidence/
+.*.tmp/
+"""
 
 
 def slugify(value: str) -> str:
@@ -71,6 +74,26 @@ def run_git(args: list[str], cwd: Path) -> bool:
     return result.returncode == 0
 
 
+def ensure_doc_gitignore(workline_dir: Path) -> bool:
+    """evidence/ 产物和 init 残留的暂存目录不进文档库。
+
+    已有 .gitignore 一律不动：用户手改过的忽略规则优先于默认内容。
+    """
+    gitignore = workline_dir / ".gitignore"
+    if gitignore.exists():
+        return True
+    try:
+        gitignore.write_text(DOC_GITIGNORE, encoding="utf-8")
+    except OSError as exc:
+        print(
+            f"NOTICE: 无法写入 {gitignore}：{exc}，evidence/ 等过程产物不会被文档库忽略",
+            file=sys.stderr,
+        )
+        return False
+    print(f"NOTICE: 已写入文档库忽略规则 {gitignore}", file=sys.stderr)
+    return True
+
+
 def ensure_doc_repo(workline_dir: Path, active_dir: Path) -> None:
     """过程文档用 .workline/ 下的独立 Git 仓库管理，和代码仓库彻底分开。
 
@@ -86,8 +109,10 @@ def ensure_doc_repo(workline_dir: Path, active_dir: Path) -> None:
             return
         print(f"NOTICE: 已建立过程文档 Git 仓库 {workline_dir}", file=sys.stderr)
 
-    rel = active_dir.relative_to(workline_dir).as_posix()
-    if not run_git(["add", "--", rel], workline_dir):
+    paths = [active_dir.relative_to(workline_dir).as_posix()]
+    if ensure_doc_gitignore(workline_dir):
+        paths.append(".gitignore")
+    if not run_git(["add", "--", *paths], workline_dir):
         return
     if not run_git(["commit", "-m", f"workline: {active_dir.name} init"], workline_dir):
         print(

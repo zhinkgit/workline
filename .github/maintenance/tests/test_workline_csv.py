@@ -1035,6 +1035,69 @@ class TwoRepoModelTests(unittest.TestCase):
         self.assertTrue((root / ".workline" / ".git").exists())
         self.assertIn("提交失败", result.stderr)
 
+    def test_init_writes_doc_gitignore(self) -> None:
+        """文档库带上忽略规则：evidence/ 产物不进版本管理，也不污染 git status。"""
+        root = self.tmpdir / "proj"
+        self.make_repo(root, "code\n")
+        result = subprocess.run(
+            [sys.executable, str(INIT), "--root", str(root), "--brief", "bulk import",
+             "--now", "2026-09-16-1000"],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=git_env(identity=True),
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        workline = root / ".workline"
+        self.assertEqual(
+            (workline / ".gitignore").read_text(encoding="utf-8"), "evidence/\n.*.tmp/\n"
+        )
+        tracked = subprocess.run(
+            ["git", "ls-files"], cwd=workline, capture_output=True, text=True, check=True
+        ).stdout
+        self.assertIn(".gitignore", tracked.splitlines())
+
+        active = Path(result.stdout.strip())
+        evidence = active / "evidence" / "T001-log"
+        evidence.mkdir(parents=True)
+        (evidence / "big.log").write_text("x\n", encoding="utf-8")
+        status = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=all"],
+            cwd=workline,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        self.assertEqual(status.strip(), "")
+
+    def test_init_backfills_doc_gitignore_without_overwriting(self) -> None:
+        """老文档库缺 .gitignore 就补上；已有内容一律不动。"""
+        root = self.tmpdir / "proj"
+        self.make_repo(root, "code\n")
+
+        def run_init(stamp: str, slug: str) -> None:
+            result = subprocess.run(
+                [sys.executable, str(INIT), "--root", str(root), "--brief", "task",
+                 "--slug", slug, "--now", stamp],
+                capture_output=True,
+                text=True,
+                check=False,
+                env=git_env(identity=True),
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+        gitignore = root / ".workline" / ".gitignore"
+        run_init("2026-09-16-1000", "first")
+        gitignore.unlink()
+        run_init("2026-09-16-1100", "second")
+        self.assertIn("evidence/", gitignore.read_text(encoding="utf-8"))
+
+        gitignore.write_text("evidence/\nmy-own-rule/\n", encoding="utf-8")
+        run_init("2026-09-16-1200", "third")
+        self.assertEqual(
+            gitignore.read_text(encoding="utf-8"), "evidence/\nmy-own-rule/\n"
+        )
+
 
 class SnapshotTests(unittest.TestCase):
     """snapshot 把活动目录的四个过程文件提交进 .workline/ 文档库。"""

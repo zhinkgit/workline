@@ -39,7 +39,7 @@ disable-model-invocation: true
 4. 确认新目录包含：
    - `brief.md`
    - `run.md`
-5. 确认 `.workline/` 下已有独立的过程文档 Git 仓库（脚本自动建，见「两套版本管理」）。
+5. 确认 `.workline/` 下已有独立的过程文档 Git 仓库和 `.gitignore`（脚本自动建，见「两套版本管理」）。
 6. 返回活动目录路径，并按下节告诉用户他需要准备什么。
 
 示例：
@@ -62,7 +62,9 @@ python <SKILL_DIR>/scripts/init_workline.py --root . --slug modify-agc-module --
 
 这样 workline 打开在哪一层都不影响流程：打开在代码仓库根目录可以，打开在 `C:/Users/Public/RK3568` 这种父目录、代码散在 `project/commagc/agcavc` 子目录里也可以。
 
-脚本在 `.workline/` 下 `git init`（已存在则跳过），并把新建的活动目录提交一次作为基线；失败只提示不阻断。
+脚本在 `.workline/` 下 `git init`（已存在则跳过），写入 `.workline/.gitignore`（文件已存在则完全不动，你手改过的规则优先），再把新建的活动目录和这份忽略规则一起提交作为基线；失败只提示不阻断。
+
+默认忽略 `evidence/`（执行阶段的日志、截图、包等产物）和 `.<活动目录名>.tmp`（init 中断时残留的暂存目录）。文档库只管文字过程记录，产物留在工作区；确实要把某份 evidence 纳入版本管理时，自己改忽略规则或 `git add -f`。
 
 ## 材料清单
 
@@ -94,7 +96,7 @@ python <SKILL_DIR>/scripts/init_workline.py --root . --slug modify-agc-module --
 - 新建活动目录路径（目录名为全英文 slug）。
 - `brief.md` 已写入创建时间和用户提供的原始粗需求。
 - `run.md` 已创建，内含「阶段门禁」表，四扇门都是未确认 / 未审查。
-- `.workline/` 下已建立独立的过程文档 Git 仓库，业务代码的版本管理仍归代码仓库自己；若脚本提示 git 不可用或提交失败，如实转达。
+- `.workline/` 下已建立独立的过程文档 Git 仓库和 `.gitignore`（忽略 `evidence/` 产物），业务代码的版本管理仍归代码仓库自己；若脚本提示 git 不可用、忽略规则写入失败或提交失败，如实转达。
 - 请检查 `brief.md` 中的原始粗需求；材料清单现在是空的，**只需登记仓库里没有的外部材料**，直接填位置和用途，不必复制。代码在子目录的仓库时，用途以 `[仓库]` 开头登记，否则后续提交哈希无法核验。
 - 仓库内已有的文件目录不必手工登记，`$workline-grill` 会扫出候选清单请你确认。
 - 外部材料登记好后使用 `$workline-grill`；它会先补全候选材料清单、评估是否够用，再开始分轮澄清。

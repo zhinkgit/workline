@@ -72,6 +72,7 @@ flowchart TD
 ```text
 .workline/
 ├── .git/                           ← 过程文档库，和代码仓库各管各的
+├── .gitignore                      ← 忽略 evidence/ 等过程产物
 ├── notes/                          ← 跨任务复用的结论，索引挂进 AGENTS.md / CLAUDE.md
 │   └── index.md
 ├── active/
@@ -86,7 +87,7 @@ flowchart TD
 
 ### 两套版本管理
 
-过程文档和业务代码分开管：`.workline/.git` 管 `brief.md`、`prd.md`、`tasks.csv`、`run.md`、`notes/`；业务代码归代码仓库自己，由 `workline-run` 每个任务收口时提交。`workline-init` 会自动建文档库并提交基线。
+过程文档和业务代码分开管：`.workline/.git` 管 `brief.md`、`prd.md`、`tasks.csv`、`run.md`、`notes/`；业务代码归代码仓库自己，由 `workline-run` 每个任务收口时提交。`workline-init` 会自动建文档库、写入 `.gitignore`（忽略 `evidence/` 产物和 init 残留的暂存目录）并提交基线。
 
 文档库按阶段及时提交：每个 Skill 进入和结束时各调一次 `workline_csv.py snapshot`，`workline-run` 每条任务落定状态后再调一次，`workline-archive` 最后提交归档搬迁。进入时的快照专门记下你在两个阶段之间手改的内容，`git -C .workline log` 就是这次任务的完整过程史。
 
